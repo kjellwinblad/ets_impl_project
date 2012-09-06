@@ -1,4 +1,4 @@
-ets_impl_project
-================
+ETS Implementation Project
+==========================
 
-Contains files related to an investigation about the current Erlang ETS implementation (Started September 2012)
+This git repository contains files related to an investigation about the current Erlang ETS implementation (Started September 2012)
