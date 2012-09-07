@@ -275,8 +275,13 @@ all_next_step_arrays(Array, CurrentPos, Cache) ->
 		    IsFound = ets:member(Cache, MoveArray),
 		    case IsFound of
 			false ->
-			    ets:insert(Cache, {MoveArray}),
-			    [MoveArray|all_next_step_arrays(Array, CurrentPos + 1, Cache)];
+			    Inserted = ets:insert_new(Cache, {MoveArray}),
+			    case Inserted of
+				true ->
+				    [MoveArray|all_next_step_arrays(Array, CurrentPos + 1, Cache)];
+				false ->
+				    all_next_step_arrays(Array, CurrentPos + 1, Cache)
+			    end;
 			true ->
 			    all_next_step_arrays(Array, CurrentPos + 1, Cache)
 		    end
