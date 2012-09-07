@@ -7,7 +7,7 @@ priv
 *~
 benchmark/benchmark.eps
 [#]*[#]
-.[#]
+.[#]*
 *.aux
 *.glo
 *.idx
