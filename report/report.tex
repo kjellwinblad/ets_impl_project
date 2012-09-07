@@ -1,16 +1,78 @@
-\documentclass[pdftex,a4paper]{article}
+%\documentclass[aps,pre,preprint,groupedaddress,nofootinbib]{revtex4}
+\documentclass[aps,pre,preprint,nofootinbib]{revtex4}
+%\documentclass[aps,twocolumn,pre,nofootinbib]{revtex4}   % list options between brackets
+\usepackage{}              % list packages between braces
 
-\usepackage{a4wide}
-\usepackage{xspace}
-
-\title{Erlang Term Storage (ETS) tables}
-\author{Stavros Aronis \and Kjell Winblad}
- \date{}
+% type user-defined commands here
 
 \begin{document}
 
+\title{Erlang Term Storage Implementation}
+\author{Kjell Winblad and Stavros Aronis}
+\date{\today}
+
+
+\begin{abstract}
+
+  This report describe in detail how the Erlang Term Storage (ETS) is implemented.
+  The report is created in the RELEASE project as the first step towards creating a more scalable ETS implementation.
+  ETS tables are common way to share data between processes in Erlang programs.
+  It is important to have a very good ETS implementation because shared data is often the bottleneck in concurrent applications.
+  The main goals of the report are:
+  \begin{itemize}
+   \item to get an understanding of the current implementation of the different ETS tables
+   \item and to communicate this knowledge to for example the Erlang OTP team. 
+  \end{itemize}
+
+\end{abstract}
+
 \maketitle
 
-This will be the report
+\section{Introduction}
+
+Erlang Term Storage (ETS) tables is a part of Erlang standard library. It is used as a way to efficintly share memory between processes. An Erlang ETS table share many properties with ordinary Erlang processes. The programer can manage ETS tables by a set of  An ETS table is identified by an identifier that is created 
+
+\section{Handling of Tables}
+
+The infrastructure for the hanling of tables is described in this secrion. An overview of the datastructures involved is provided in section~\ref{sec:tables_overview}. How locking is done when tables are accessed concurrently is described in section~\ref{sec:tables_locking}.
+
+\subsection{Overview} \label{sec:tables_overview}
+
+
+
+\subsection{Locking} \label{sec:tables_locking}
+
+
+\section{Different Table Types}
+
+\subsection{Set}     % section 2.1
+\subsubsection{Data Structure}
+\subsubsection{Expanding}
+\subsubsection{Shrinking}
+
+\subsection{Bag}
+\subsection{Duplicate Bag}
+\subsection{Ordered Set}
+
+
+\section{Concurrency Options}
+
+\subsection{Write Concurrency}
+
+\subsection{Read Concurrency}
+
+
+\section{Benchmark}
+
+\subsection{Description}
+
+\subsection{Results}
+
+
+\section{Scalable ETS Suggestions}
+
+\begin{thebibliography}{9}
+  % type bibliography here
+\end{thebibliography}
 
 \end{document}
