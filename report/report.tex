@@ -40,7 +40,8 @@ The \verb|ets:new| BIF can take a list of options that can be used to specify:
 
 \begin{itemize}
  \item 
- If the table type shall be \verb|set|, \verb|bag |or \verb|duplicate_bag| (See section~\ref{sec:different_table_types}).
+ If the table type shall be \verb|set|, \verb|bag |or \verb|duplicate_bag|. 
+ See section~\ref{sec:different_table_types} for information about the data-structures used in the different table types.
  \item 
  The access level which can be \verb|private|, \verb|protected| and \verb|public|.
  See the Erlang documentation for \verb|ets:new| for more information about these options.
@@ -48,7 +49,7 @@ The \verb|ets:new| BIF can take a list of options that can be used to specify:
  If fine grained locking shall be enabled for read and write can be specified with the options \verb|write_concurrency| and \verb|read_concurrency|. 
  These options may have a large impact on scalability for some applications.
  See section~\ref{sec:concurrency_options} and \ref{sec:benchmark} for more information about these options.
- 
+ \item
  
 \end{itemize}
 
@@ -59,7 +60,9 @@ If a process has been specified with the \verb|heir| option it will get a messag
 
 \subsection{Overview of Table Operations}
 
-
+This section gives an overview of the most fundamental ETS table operations. 
+See the Erlang documentation for ETS tables for a complete description of all table operations. 
+See section~\ref{sec:table_types} for information about the data-structures used in the tables. 
 
 \section{Handling of Tables}
 
@@ -74,7 +77,7 @@ How locking is done when tables are accessed concurrently is described in sectio
 \subsection{Locking} \label{sec:tables_locking}
 
 
-\section{Different Table Types} \label{sec:different_table_types}
+\section{Table Types} \label{sec:table_types}
 
 \subsection{Set}     % section 2.1
 \subsubsection{Data Structure}
