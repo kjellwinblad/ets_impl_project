@@ -49,8 +49,6 @@ The \verb|ets:new| BIF can take a list of options that can be used to specify:
  If fine grained locking shall be enabled for read and write can be specified with the options \verb|write_concurrency| and \verb|read_concurrency|. 
  These options may have a large impact on scalability for some applications.
  See section~\ref{sec:concurrency_options} and \ref{sec:benchmark} for more information about these options.
- \item
- 
 \end{itemize}
 
 All ETS tables are owned by the creating process as long as the creating process is alive and has not given the ownership to an other process with the BIF \verb|ets:give_away|.

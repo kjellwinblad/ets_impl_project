@@ -32,3 +32,4 @@ benchmark/benchmark.eps
 *.out
 *.synctex.gz
 *.fdb_latexmk
+*.kate-swp
