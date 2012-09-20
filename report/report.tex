@@ -63,16 +63,15 @@ See the Erlang documentation for ETS tables for a complete description of all ta
 See section~\ref{sec:table_types} for information about the data-structures used in the tables.
 
 \begin{description}
- \item[lookup] 
+ \item[lookup(Tab, Key) $\rightarrow$ [Object]] 
  Returns a list of elements with the given key. 
  Several lookups can be done concurrently if \verb|read_concurrency| is activated.
- \item[insert]
+ \item[insert(Tab, ObjectOrObjects) $\rightarrow$ true]
  Insert the given object or objects in case the parameter is a list of objects.
  Several inserts can be done concurrently if \verb|write_concurrency| is activated when \verb|set|, \verb|bag | or \verb|duplicate_bag| is used.
- \item[insert\_new]
+ \item[insert\_new(Tab, ObjectOrObjects) $\rightarrow$ true]
  This operation will insert the given object or objects if no object with the same key as any of the object(s) exists. 
  If a key already exists the operation will return false.
- 
 \end{description}
 
 
@@ -84,12 +83,20 @@ How locking is done when tables are accessed concurrently is described in sectio
 
 \subsection{Overview} \label{sec:tables_overview}
 
-The ETS tables are stored in a meta table.
-The meta table can contain a maximum of 2053 tables.
-This maximum can be changed by the setting the  environment variable \verb|DB_DEF_MAX_TABS|.
-The meta table has fixed size and is initialized when the Erlang system is started.
-The meta table is implemented as an array 
 
+\subsubsection{Global data structures}
+
+
+\begin{description}
+  \item[meta\_main\_table] Contains all the tables. TIDs map to a slot.
+  \item[meta\_main\_table] The meta table can contain a maximum of 2053 tables. 
+  This maximum can be changed by the setting the  environment variable \verb|DB_DEF_MAX_TABS|.
+  The size is fixed during the liftime of the Erlang VM.
+  \item[meta\_name\_table] Keys are atoms, values are TIDs.
+  \item[meta\_pid\_to\_tab] Maps processes (PIDs) to tables owned by them.
+  \item[meta\_pid\_to\_fixed\_tab] Maps processes (PIDs) to tables that are
+    fixated by them.
+\end{description}
 
 \subsection{Locking} \label{sec:tables_locking}
 
