@@ -5,7 +5,6 @@ priv
 *.beam
 *.plt
 *~
-benchmark/benchmark.eps
 [#]*[#]
 .[#]*
 *.aux
@@ -34,3 +33,6 @@ benchmark/benchmark.eps
 *.fdb_latexmk
 *.kate-swp
 *.backup
+report/benchmark.eps
+benchmark/benchmark.eps
+*.pdf

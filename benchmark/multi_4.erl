@@ -112,7 +112,7 @@ get_next_and_rest([E|Rest]) ->
     
 
 start_worker(Cache) ->
-    spawn(multi_3, worker, [Cache, [], self()]).
+    spawn(multi_4, worker, [Cache, [], self()]).
 
 
 worker(Cache, WorkDoneSoFar, ResultReciver) ->

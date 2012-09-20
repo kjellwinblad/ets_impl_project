@@ -1,7 +1,5 @@
 #Benchmark: 1 to 30 workers
-#ETS Options [ordered_set,public,
-              {write_concurrency,true},
-              {read_concurrency,true}] 
+#ETS Options [ordered_set,public,{write_concurrency,true},{read_concurrency,true}] 
 1 57026948.0
 2 35226981.0
 3 29273177.0
