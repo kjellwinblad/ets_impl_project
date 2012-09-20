@@ -34,15 +34,14 @@ Erlang Term Storage (ETS) tables is a part of Erlang standard library.
 The ETS tables are used as a way to efficiently share data between processes. 
 An Erlang ETS table share many properties with ordinary Erlang processes. 
 The programmer can manage ETS tables by a set of built-in functions (BIFs). 
-The BIFs are implemented in the C programming language and they are a part of Erlang standard library.
-An ETS table is identified by an identifier.
+The BIFs are implemented in the C programming language and they are a part of Erlang standard library. An ETS table is identified by an identifier.
 The identifier for a table is created with the BIF \verb|ets:new|.
 The \verb|ets:new| BIF can take a list of options that can be used to specify: 
 
 \begin{itemize}
  \item 
  If the table type shall be \verb|set|, \verb|bag |, \verb|duplicate_bag| or \verb|ordered_set|. 
- See section~\ref{sec:table_types} for information about the data-structures used in the different table types.
+ See section~\ref{sec:different_table_types} for information about the data-structures used in the different table types.
  \item 
  The access level which can be \verb|private|, \verb|protected| and \verb|public|.
  See the Erlang documentation for \verb|ets:new| for more information about these options.
@@ -73,8 +72,10 @@ See section~\ref{sec:table_types} for information about the data-structures used
  \item[insert\_new(Tab, ObjectOrObjects) $\rightarrow$ true]
  This operation will insert the given object or objects if no object with the same key as any of the object(s) exists. 
  If a key already exists the operation will return false.
+ \item[delete(Tab, Key) $\rightarrow$ true] Deletes all objects with the given key from the table.
+ \item[first(Tab) $\rightarrow$ Key $|$ \texttt{end\_of\_table} ] Returns the first key in the table. If the table is of the \verb|ordered_set| type, the first key in Erlang term order will be returned. If the table is of any other type, the first key according to the table's internal order will be returned. If the table is empty, \verb|end_of_table| will be returned.
+ \item[last(Tab) $\rightarrow$ Key $|$ \texttt{end\_of\_table} ] Returns the last key in the table.
 \end{description}
-
 
 \section{Handling of Tables}
 
@@ -84,15 +85,10 @@ How locking is done when tables are accessed concurrently is described in sectio
 
 \subsection{Overview} \label{sec:tables_overview}
 
-
 \subsubsection{Global data structures}
-
 
 \begin{description}
   \item[meta\_main\_table] Contains all the tables. TIDs map to a slot.
-  \item[meta\_main\_table] The meta table can contain a maximum of 2053 tables. 
-  This maximum can be changed by the setting the  environment variable \verb|DB_DEF_MAX_TABS|.
-  The size is fixed during the liftime of the Erlang VM.
   \item[meta\_name\_table] Keys are atoms, values are TIDs.
   \item[meta\_pid\_to\_tab] Maps processes (PIDs) to tables owned by them.
   \item[meta\_pid\_to\_fixed\_tab] Maps processes (PIDs) to tables that are
