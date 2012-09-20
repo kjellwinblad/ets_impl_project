@@ -1,7 +1,9 @@
 %\documentclass[aps,pre,preprint,groupedaddress,nofootinbib]{revtex4}
 \documentclass[aps,pre,preprint,nofootinbib]{revtex4}
 %\documentclass[aps,twocolumn,pre,nofootinbib]{revtex4}   % list options between brackets
-\usepackage{}              % list packages between braces
+\usepackage{listings}              % list packages between braces
+\usepackage{graphicx}
+\usepackage{epstopdf}
 
 % type user-defined commands here
 
@@ -123,15 +125,78 @@ How locking is done when tables are accessed concurrently is described in sectio
 
 \section{Benchmark} \label{sec:benchmark}
 
-\subsection{Description}
+  A simple benchmark has been performed.
+  The benchmark is created to see how the \verb|write_concurrency| and \verb|read_concurrency| options that effects the performance for the different table types on a real world problem.
+  The benchmark creates workers that all do \verb|lookup| and \verb|insert| on the same ETS table (cache).
+  The benchmark was done on a computer with 64 cores.
+  We run the benchmark program with all different combinations of \verb|write_concurrency|, \verb|read_concurrency| and the different table types: \verb|set| and \verb|ordered_set| with 1 to 30 workers.
+  
+  \subsection{Benchmark Problem}
+    The benchmark program finds the minimum number of steps to sort an array with a few constraints.
+    The array contains \emph{black} marks, \emph{white} marks and \emph{empty} positions.
+    An array can be represented as for example \verb|"ebbwe"|, where \verb|e| represent \emph{empty} position, \verb|w| represent a \emph{white} mark and \verb|b| a \emph{black} mark.
+    Black marks can only move in the right direction and white marks can only move in the left direction.
+    In one sort step a mark can:
+    \begin{itemize}
+     \item move one step in the array if the neighbor position in the direction of the movement is empty or
+     \item move two steps in the array if the neighbor position in the direction of the movement contains a mark and the next position is empty.
+    \end{itemize}
+    A sorted array has all whites as far to the right in the array as possible and all blacks as far right to the array as possible.
+    Some input arrays can not be sorted with the given constraints, e.g. \verb|"bbww"|.
+    If the input array can not be sorted the program shall return -1.
+    The minimum number of steps for \verb|"ebbwe"| is 5.
+    The benchmark timed the time it took to return the result for the arrays \verb|"bebebbeeeewwwbw"|, \verb|"bebebeeewewewewwe"|.
+    
+  \subsection{Implementation}
+    The Erlang program that solves the benchmark problem is available at www.github.com\footnote{http://github.com/kjellwinblad/ets\_impl\_project/blob/master/benchmark/multi\_4.erl}.
+    The program explores the the possible solutions in a breath first search manner.
+    Explored configurations are saved in an ETS table to avoid repeating work.
+    The program has one coordinator process and a number of worker process.
+    At a specific level in the search tree the coordinator divides configurations that needs to be explored in the next level evenly to the workers.
+    The workers check if the given configuration is a solution.
+    If it is not a solution it is expanded by generating all possible configurations that can be creating by doing one sort step.
+    Directly after a configuration is generated it is checked if it already exists in the ETS table cache with the \verb|ets:member| function.
+    If it already exists, it is thrown away because the configuration has already been visited.
+    Otherwise, the configuration is inserted in the ETS table with the \verb|ets:inser_new| operation.
+    The return value of \verb|ets:insert_new| is checked to make sure that the configuration has not been inserted by another process between the call to \verb|ets:member| and \verb|ets:insert_new|.
+    The Erlang code that is interacting with the ETS table cache in the workers can be seen in listing~\ref{li_erlang_ets_interaction}.
+
+    \lstset{language=erlang, caption=Worker code that is interacting with ETS, label=li_erlang_ets_interaction} 
+\begin{lstlisting} 
+IsFound = ets:member(Cache, MoveArray),
+case IsFound of
+  false ->
+    Inserted = ets:insert_new(Cache, {MoveArray}),
+    case Inserted of
+      true ->
+        [MoveArray|all_next_step_arrays(Array, CurrentPos + 1, Cache)];
+      false ->
+        all_next_step_arrays(Array, CurrentPos + 1, Cache)
+    end;
+  true ->
+    all_next_step_arrays(Array, CurrentPos + 1, Cache)
+end
+\end{lstlisting}
+    
+    A worker send back all configurations that needs to be explored in the next level to the coordinator when it has processed all given configurations on the current level.
+
 
 \subsection{Results}
+
+  The results of the benchmark can be seen in figure~\ref{fig:benchmark_results}.
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=1.0\textwidth]{benchmark.eps}
+\caption{Benchmark Results} 
+\label{fig:benchmark_results}
+\end{figure}
 
 
 \section{Scalable ETS Suggestions}
 
 \begin{thebibliography}{9}
-  % type bibliography here
+  % type bibliography here 
 \end{thebibliography}
 
 \end{document}

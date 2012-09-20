@@ -3,6 +3,10 @@
 all: report.pdf
 
 report.pdf: report.tex
+	echo repomake 
+	cd ../benchmark ; \
+	gnuplot < create_graph.gp ; \
+	cp benchmark.eps ../report/benchmark.eps
 	latexmk -pdf -e '$$pdflatex=q/pdflatex --shell-escape %O %S/' $*
 
 clean:
