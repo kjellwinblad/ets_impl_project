@@ -34,14 +34,15 @@ Erlang Term Storage (ETS) tables is a part of Erlang standard library.
 The ETS tables are used as a way to efficiently share data between processes. 
 An Erlang ETS table share many properties with ordinary Erlang processes. 
 The programmer can manage ETS tables by a set of built-in functions (BIFs). 
-The BIFs are implemented in the C programming language and they are a part of Erlang standard library. An ETS table is identified by an identifier.
+The BIFs are implemented in the C programming language and they are a part of Erlang standard library.
+An ETS table is identified by an identifier.
 The identifier for a table is created with the BIF \verb|ets:new|.
 The \verb|ets:new| BIF can take a list of options that can be used to specify: 
 
 \begin{itemize}
  \item 
  If the table type shall be \verb|set|, \verb|bag |, \verb|duplicate_bag| or \verb|ordered_set|. 
- See section~\ref{sec:different_table_types} for information about the data-structures used in the different table types.
+ See section~\ref{sec:table_types} for information about the data-structures used in the different table types.
  \item 
  The access level which can be \verb|private|, \verb|protected| and \verb|public|.
  See the Erlang documentation for \verb|ets:new| for more information about these options.
@@ -65,7 +66,7 @@ See section~\ref{sec:table_types} for information about the data-structures used
 \begin{description}
  \item[lookup(Tab, Key) $\rightarrow$ [Object]] 
  Returns a list of elements with the given key. 
- Several lookups can be done concurrently if \verb|read_concurrency| is activated.
+ Calls to \verb|lookup| and \verb|insert| can be done concurrently if \verb|read_concurrency| is activated when \verb|set|, \verb|bag | or \verb|duplicate_bag| is used.
  \item[insert(Tab, ObjectOrObjects) $\rightarrow$ true]
  Insert the given object or objects in case the parameter is a list of objects.
  Several inserts can be done concurrently if \verb|write_concurrency| is activated when \verb|set|, \verb|bag | or \verb|duplicate_bag| is used.
