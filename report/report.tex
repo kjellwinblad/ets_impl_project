@@ -36,8 +36,7 @@ Erlang Term Storage (ETS) tables is a part of Erlang standard library.
 The ETS tables are used as a way to efficiently share data between processes. 
 An Erlang ETS table share many properties with ordinary Erlang processes. 
 The programmer can manage ETS tables by a set of built-in functions (BIFs). 
-The BIFs are implemented in the C programming language and they are a part of Erlang standard library.
-An ETS table is identified by an identifier.
+The BIFs are implemented in the C programming language and they are a part of Erlang standard library. An ETS table is identified by an identifier.
 The identifier for a table is created with the BIF \verb|ets:new|.
 The \verb|ets:new| BIF can take a list of options that can be used to specify: 
 
@@ -75,8 +74,10 @@ See section~\ref{sec:table_types} for information about the data-structures used
  \item[insert\_new(Tab, ObjectOrObjects) $\rightarrow$ true]
  This operation will insert the given object or objects if no object with the same key as any of the object(s) exists. 
  If a key already exists the operation will return false.
+ \item[delete(Tab, Key) $\rightarrow$ true] Deletes all objects with the given key from the table.
+ \item[first(Tab) $\rightarrow$ Key $|$ \texttt{end\_of\_table} ] Returns the first key in the table. If the table is of the \verb|ordered_set| type, the first key in Erlang term order will be returned. If the table is of any other type, the first key according to the table's internal order will be returned. If the table is empty, \verb|end_of_table| will be returned.
+ \item[last(Tab) $\rightarrow$ Key $|$ \texttt{end\_of\_table} ] Returns the last key in the table.
 \end{description}
-
 
 \section{Handling of Tables}
 
@@ -86,15 +87,10 @@ How locking is done when tables are accessed concurrently is described in sectio
 
 \subsection{Overview} \label{sec:tables_overview}
 
-
 \subsubsection{Global data structures}
-
 
 \begin{description}
   \item[meta\_main\_table] Contains all the tables. TIDs map to a slot.
-  \item[meta\_main\_table] The meta table can contain a maximum of 2053 tables. 
-  This maximum can be changed by the setting the  environment variable \verb|DB_DEF_MAX_TABS|.
-  The size is fixed during the liftime of the Erlang VM.
   \item[meta\_name\_table] Keys are atoms, values are TIDs.
   \item[meta\_pid\_to\_tab] Maps processes (PIDs) to tables owned by them.
   \item[meta\_pid\_to\_fixed\_tab] Maps processes (PIDs) to tables that are
@@ -103,10 +99,16 @@ How locking is done when tables are accessed concurrently is described in sectio
 
 \subsection{Locking} \label{sec:tables_locking}
 
+Different levels of locking are required for each operation on an ETS table.
 
 \section{Table Types} \label{sec:table_types}
 
+Tables of type \verb|set|, \verb|bag| and \verb|duplicate_bag| do not impose any particular order between their entries. These tables are implemented in the runtime system as hash tables. In contrast, \verb|ordered_set| tables have their entries ordered according to their keys and are therefore implemented as AVL trees. The runtime system is structured in such a way that operations which are transparent to the underlying implementation of a table are handled with normal C functions, while operations that depend on the implementation are dispatched from the equivalent of a method table.
+
+\subsection{Hash tables}
+
 \subsection{Set}     % section 2.1
+
 \subsubsection{Data Structure}
 \subsubsection{Expanding}
 \subsubsection{Shrinking}
@@ -122,6 +124,14 @@ How locking is done when tables are accessed concurrently is described in sectio
 
 \subsection{Read Concurrency}
 
+\section{Fixation}
+
+A process can call \texttt{ets:safe\_fixtable(Table, true $|$ false)} to put a fixation on a table implemented with a hash table (\verb|set|, \verb|bag| or \verb|duplicate_bag|). When a table is fixed, a sequence of \verb|first/1| and \verb|next/2| calls are guaranteed to succeed and each object in the table will only be returned once, even if objects are removed or inserted during the traversal. The keys for new objects inserted during the traversal may be returned by \verb|next/2| (it depends on the internal ordering of the keys). In essence this translates to the following 2 guarantees:
+
+\begin{enumerate}
+  \item Keys will not totally disappear from the table. A key can thus be used as an iterator to find the next key in iteration sequence. Note however that this does not mean that (pointers to) table objects are guaranteed to be maintained while the table is fixated. A BAG or DBAG may actually remove objects as long as there is at least one object left in the table with the same key (alive or pseudo-deleted).
+    \item Objects will not be moved between buckets due to table grow/shrink. This will guarantee that iterations do not miss keys or get double-hits.
+\end{enumerate}
 
 \section{Benchmark} \label{sec:benchmark}
 
