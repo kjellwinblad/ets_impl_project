@@ -79,6 +79,10 @@ See section~\ref{sec:table_types} for information about the data-structures used
  \item[last(Tab) $\rightarrow$ Key $|$ \texttt{end\_of\_table} ] Returns the last key in the table.
 \end{description}
 
+\section{Previous Work}
+
+
+
 \section{Handling of Tables}
 
 The infrastructure for the handling of tables is described in this section. 
@@ -194,7 +198,13 @@ end
 \subsection{Results}
 
   The results of the benchmark can be seen in figure~\ref{fig:benchmark_results}.
-
+  The filled straight line labeled \emph{serial} is the performance of a serial version of benchmark program.
+  The serial version can also be found at www.github.com\footnote{http://github.com/kjellwinblad/ets\_impl\_project/blob/master/benchmark/single\_1.erl}.
+  The graphs with \emph{set} in the label shows the benchmark times for the table type \verb|set|.
+  The graphs with \emph{ordset} in the label shows the benchmark times for the table type \verb|ordered_set|.
+  A \emph{w} in the label means that the benchmark program has \verb|write_concurrency| enabled and a \emph{r} in the label means that the benchmark program has \verb|read_concurrency| enabled.
+  
+  
 \begin{figure}[htb]
 \centering
 \includegraphics[width=1.0\textwidth]{benchmark.eps}
@@ -202,8 +212,17 @@ end
 \label{fig:benchmark_results}
 \end{figure}
 
-
+  One can note note that the that the table type set with \verb|write_concurrency| enabled seems to give the same performance both with and without \verb|read_concurrency| enabled.
+  All other configurations give similar performance.
+  In this particular benchmark it seems like \verb|write_concurrency| for the table type set is particularly important for scalability.
+  For the other benchmarks the performance seems to get worse when more than five worker processes are used.
+  It is reasonable to think that the reason for this is that write lock collisions become more frequent when more workers are added.
+  
+  
+  
 \section{Scalable ETS Suggestions}
+
+  
 
 \begin{thebibliography}{9}
   % type bibliography here 
