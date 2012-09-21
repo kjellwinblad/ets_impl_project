@@ -36,3 +36,4 @@ priv
 report/benchmark.eps
 benchmark/benchmark.eps
 *.pdf
+*.bak
