@@ -117,11 +117,25 @@ How locking is done when tables are accessed concurrently is described in sectio
 
 Different levels of locking are required for each operation on an ETS table.
 
+\begin{itemize}
+\item Creation and deletion of a table require the acquisition of the write lock protecting the \verb|meta_main_table|.
+\item Creation, deletion and renaming of a named table also require the acquisition of the write lock protecting the \verb|meta_name_table|.
+\item Read and write operations on a table require the acquisition of the appropriate table locks.
+  Depending on the type of the table, read and write operations for keys that are different can be allowed to run in parallel, by locking only parts of the table.
+  We give further details in section~\ref{sec:table_types}.
+\end{itemize}
+
 \section{Table Types} \label{sec:table_types}
 
-Tables of type \verb|set|, \verb|bag| and \verb|duplicate_bag| do not impose any particular order between their entries. These tables are implemented in the runtime system as hash tables. In contrast, \verb|ordered_set| tables have their entries ordered according to their keys and are therefore implemented as AVL trees. The runtime system is structured in such a way that operations which are transparent to the underlying implementation of a table are handled with normal C functions, while operations that depend on the implementation are dispatched from the equivalent of a method table.
+Tables of type \verb|set|, \verb|bag| and \verb|duplicate_bag| do not impose any particular order between their entries.
+These tables are implemented in the runtime system as hash tables.
+In contrast, \verb|ordered_set| tables have their entries ordered according to their keys and are therefore implemented as AVL trees.
+The runtime system is structured in such a way that operations which are transparent to the underlying implementation of a table are handled with normal C functions, while operations that depend on the implementation are dispatched from the equivalent of a method table.
 
 \subsection{Hash tables}
+
+There are 16 locks.
+
 
 \subsection{Set}     % section 2.1
 
@@ -142,11 +156,18 @@ Tables of type \verb|set|, \verb|bag| and \verb|duplicate_bag| do not impose any
 
 \section{Fixation}
 
-A process can call \texttt{ets:safe\_fixtable(Table, true $|$ false)} to put a fixation on a table implemented with a hash table (\verb|set|, \verb|bag| or \verb|duplicate_bag|). When a table is fixed, a sequence of \verb|first/1| and \verb|next/2| calls are guaranteed to succeed and each object in the table will only be returned once, even if objects are removed or inserted during the traversal. The keys for new objects inserted during the traversal may be returned by \verb|next/2| (it depends on the internal ordering of the keys). In essence this translates to the following 2 guarantees:
+A process can call \texttt{ets:safe\_fixtable(Table, true $|$ false)} to put a fixation on a table implemented with a hash table (\verb|set|, \verb|bag| or \verb|duplicate_bag|).
+When a table is fixed, a sequence of \verb|first/1| and \verb|next/2| calls are guaranteed to succeed and each object in the table will only be returned once, even if objects are removed or inserted during the traversal.
+The keys for new objects inserted during the traversal may be returned by \verb|next/2| (it depends on the internal ordering of the keys).
+In practice, this translates to the following 2 guarantees:
 
 \begin{enumerate}
-  \item Keys will not totally disappear from the table. A key can thus be used as an iterator to find the next key in iteration sequence. Note however that this does not mean that (pointers to) table objects are guaranteed to be maintained while the table is fixated. A BAG or DBAG may actually remove objects as long as there is at least one object left in the table with the same key (alive or pseudo-deleted).
-    \item Objects will not be moved between buckets due to table grow/shrink. This will guarantee that iterations do not miss keys or get double-hits.
+  \item Keys will not totally disappear from the table.
+    A key can thus be used as an iterator to find the next key in iteration sequence.
+    Note however that this does not mean that (pointers to) table objects are guaranteed to be maintained while the table is fixated.
+    A BAG or DBAG may actually remove objects as long as there is at least one object left in the table with the same key (alive or pseudo-deleted).
+    \item Objects will not be moved between buckets due to table grow/shrink.
+      This will guarantee that iterations do not miss keys or get double-hits.
 \end{enumerate}
 
 \section{Benchmark} \label{sec:benchmark}
