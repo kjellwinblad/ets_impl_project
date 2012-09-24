@@ -121,7 +121,8 @@ Different levels of locking are required for each operation on an ETS table.
 \item Creation and deletion of a table require the acquisition of the write lock protecting the \verb|meta_main_table|.
 \item Creation, deletion and renaming of a named table also require the acquisition of the write lock protecting the \verb|meta_name_table|.
 \item Read and write operations on a table require the acquisition of the appropriate table locks.
-  Depending on the type of the table, read and write operations for keys that are different can be allowed to run in parallel, by locking only parts of the table.
+  Using the default options, each table has just one main lock, used for all entries.
+  Depending on the type and the options specified when a table is created, two read and write operations for different keys can be allowed to run in parallel, by locking only parts of the table.
   We give further details in section~\ref{sec:table_types}.
 \end{itemize}
 
@@ -134,8 +135,14 @@ The runtime system is structured in such a way that operations which are transpa
 
 \subsection{Hash tables}
 
-There are 16 locks.
+Hash tables distribute their entries to buckets, depending on a hash value generated using the keys.
 
+
+\subsubsection{Fine Locking}
+
+Protected and public hash tables support fine locking if created with the \verb|write_concurrency| option.
+In this case an array of locks is allocated during table creation and each lock protects a subset of the buckets.
+The size of the lock array is defined at \emph{compile time} and is currently set to 16.
 
 \subsection{Set}     % section 2.1
 
