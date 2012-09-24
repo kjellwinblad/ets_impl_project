@@ -33,11 +33,11 @@
 
 \section{Introduction}
 
-Erlang Term Storage (ETS) tables are part of Erlang runtime system.
+Erlang Term Storage (ETS) support is included in Erlang runtime system.
 ETS tables are used to store Erlang tuples outside the processes' heaps.
-This prevents garbage collection from copying these tuples while collecting memory space from a process' heap and can also be used to efficiently share data between processes. 
+This prevents garbage collection from copying these tuples while collecting memory space from a process' heap and can also be used to efficiently share data between processes. %I don't understand the part about garbage collection
 An Erlang ETS table behaves as if a dedicated process serves requests for insertions, lookups and other common operations on a key value dictionary, but is implemented in a more efficient way.
-Most of the operations on an ETS table are implemented as built-in functions of the Erlang runtime system. 
+Most of the operations on an ETS table are implemented as built-in functions (BIFs) of the Erlang runtime system. 
 An ETS table can be accessed by either a \emph{table identifier} (TID) or an atom (in case of a \emph{named} table).
 In either case the identifier for the table is returned by the call to the \verb|ets:new/2| BIF.
 The \verb|ets:new/2| BIF can take a list of options that specify: 
@@ -53,11 +53,10 @@ The \verb|ets:new/2| BIF can take a list of options that specify:
   See section~\ref{sec:table_types} for information about the data-structures used in the different table types.
 \item 
   Whether fine grained locking is enabled for read and write operations (specified with the options \verb|write_concurrency| and \verb|read_concurrency|). 
-  (At least the \verb|write_concurrency| option may have a large impact on scalability for some applications. ??)
   See section~\ref{sec:concurrency_options} and \ref{sec:benchmark} for more information about these options.
 \end{itemize}
 
-Each ETS table is owned by the creating process as long as the creating process is alive unless the ownership has been passed to another process with the BIF \verb|ets:give_away|.
+ETS tables are owned by the creating process as long as the creating process is alive unless the ownership has been passed to another process with the BIF \verb|ets:give_away|.
 If the owner of an ETS table terminates the table will be deleted, if the \verb|heir| option is not set.
 The programmer can use the \verb|heir| option, or the \verb|set_heir| BIF to specify a process that will inherit the table when the current owner terminates. 
 If a process has been specified with the \verb|heir| option it will receive a message signalling the transfer of table ownership, when the previous owner terminates.
@@ -71,10 +70,11 @@ See section~\ref{sec:table_types} for information about the data-structures used
 \begin{description}
  \item[lookup(Tab, Key) $\rightarrow$ [Object]] 
  Returns a list of elements that have the given key. 
- Calls to \verb|lookup| (and \verb|insert| ?? ) can be done concurrently if \verb|read_concurrency| is activated when \verb|set|, \verb|bag | or \verb|duplicate_bag| is used (it can always be done concurrently, a different lock is used if the option is specified).
+ Calls to \verb|lookup| and \verb|insert| can be done concurrently if \verb|read_concurrency| is activated.
  \item[insert(Tab, ObjectOrObjects) $\rightarrow$ true]
  Insert the given object (or objects, if the parameter is a list of objects) to the table.
  Several inserts can be done concurrently if \verb|write_concurrency| is activated when \verb|set|, \verb|bag | or \verb|duplicate_bag| is used.
+ If a write operation can be done concurrently, a read operation involving the same kay can also be done concurrently.
  \item[insert\_new(Tab, ObjectOrObjects) $\rightarrow$ true]
  This operation will insert the given object or objects if no object with the same key as any of the object(s) exists. 
  If a key already exists the operation will return false.
@@ -94,7 +94,7 @@ See section~\ref{sec:table_types} for information about the data-structures used
   Patrik Nyblom has suggested the addition of software transactional memory (STM) support for Erlang ETS tables~\cite{PatrikErlangTrans}.
   STM support could be added to Erlang with only minor changes to the ETS implementation \cite{PatrikErlangTrans}.
   The implementation suggested in~\cite{PatrikErlangTrans} would not effect the performance of ETS when the transactional features are not used.
-  At the same time it could increase parallelism for use cases where the only alternative without transactional memory support is to serialize all operations on the ETS table (or tables ??).
+  At the same time it could increase parallelism for use cases where the only alternative without transactional memory support is to serialize all operations on the ETS table (or tables).
   Benchmark results provided in~\cite{PatrikErlangTrans} for a prototype of ETS with transactional memory, show that transactional memory support for ETS could make some use cases much more scalable with the number of cores.
   
 
