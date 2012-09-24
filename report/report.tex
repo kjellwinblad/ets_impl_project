@@ -249,7 +249,7 @@ end
   The serial version can also be found at www.github.com\footnote{http://github.com/kjellwinblad/ets\_impl\_project/blob/master/benchmark/single\_1.erl}.
   The graphs with \emph{set} in the label shows the benchmark times for the table type \verb|set|.
   The graphs with \emph{ordset} in the label shows the benchmark times for the table type \verb|ordered_set|.
-  A \emph{w} in the label means that the benchmark program has \verb|write_concurrency| enabled and a \emph{r} in the label means that the benchmark program has \verb|read_concurrency| enabled.
+  A \emph{w} in the label means that the benchmark program has \verb|write_concurrency| enabled and an \emph{r} in the label means that the benchmark program has \verb|read_concurrency| enabled.
   
   
 \begin{figure}[htb]
@@ -270,10 +270,14 @@ end
 \section{Scalable ETS Suggestions}
 
   The benchmark that is described in section~\ref{sec:benchmark}, shows that the fine grained locking provided by the \verb|write_concurrency| option can be very important for scalability.
-  When the \verb|set| table type is being used, at least one bucket possible containing more than one key will be locked during a write operation.
+  The number of locks used when fine grained locking is enabled is hard coded to 16 in the current implementation.
   Therefore it would be possible to make the fine grained locking even more fine grained.
-  This would make the ETS consume a some more memory but possibility increase the scalability in terms of the number of cores.
-  It would be interesting to see how the benchmark described in section~\ref{sec:benchmark} would perform if even more fine grained locking was used.
+  This could possible make ETS more scalable.
+  The benchmark described in section~\ref{sec:benchmark} has been run with a versions of the runtime environment with the number of locks set to 32 and 64.
+  This did not seem to have any significant effect on the performance of the benchmark program.
+  There might be other bottleneck in this particular benchmark that are more important.
+  It would be interesting to look more deeply into how the number of locks effect the performance on other benchmarks.
+  
   
   The benchmarks that are described in~\cite{ScottEtsJudy} about Judy-array based ETS table implementations, suggests that there are other table types that are significantly faster than the current ones for some use cases.
   There might also be be other alternative data structures for implementing ETS tables that perform better when accessed concurrently on multi core systems.
