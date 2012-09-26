@@ -138,8 +138,7 @@ The runtime system is structured in such a way that operations which are transpa
 
 \subsection{Hash tables}
 
-Hash tables distribute their entries to buckets, depending on a hash value generated using the keys.
-
+Hash tables distribute their key-value entries to buckets, depending on a hash value generated using the key.
 
 \subsubsection{Fine Locking}
 
@@ -149,14 +148,55 @@ The size of the lock array is defined at \emph{compile time} and is currently se
 
 \subsubsection{Data Structure}
 
+The current implementation of ETS tables is based on linear dynamic hash tables~\cite{Larson}.
+The main data structure is called ``extended segment'' and has two parts:
+\begin{enumerate}
+  \item A ``bucket'' section, containing 256 pointers to lists of the key-value pairs that belong to the respective bucket.
+  \item A ``segment'' section, pointing to ``bucket'' sections.
+\end{enumerate}
+The runtime system can also allocate plain ``bucket'' sections, without ``segment'' sections attached.
+As an invariant, all access is initially performed on a ``current'' extended segment, but there might also exist ``previous'' extended segments.
 
+As an invariant, a continuous range of buckets (starting with bucket 0) are ``active''.
+The index of the highest active bucket is stored as \verb|nactive|.
 
-\subsubsection{Expanding}
+To operate with some element of the table, the hash value of the key of the element is first calculated.
+This hash value is then mapped to the id of a bucket of the table, using the least significant bits of the hash value.
+If the bucket is active, this is the actual index of the bucket.
+If the bucket is not active, another significant bit is dropped, and the bucket at half the previous index is used instead.
+
+The bucket id can be divided into two parts: a segment address and a bucket offset.
+Initially the segment address is used as an index on the segment section of the current ``extended segment'', to find the base pointer of a bucket section.
+Then the bucket offset is used to find the bucket itself in the bucket section.
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=1.0\textwidth]{hash_table_structure.eps}
+\caption{Hash table structure} 
+\label{fig:hash_table_structure}
+\end{figure}
+\subsubsection{Growing}
+
+Expanding happens by splitting the appropriate bucket, moving elements to the bucket after the one that is currently active.
+If the segment address of the new bucket corresponds to a slot in the index segment that is currently not pointing to a bucket section, a new plain bucket section is allocated and the slot is now pointing to the first entry in that.
+If this operation would assign a slot in the last slot of the segment section of currently active extended segment, a new extended segment is allocated instead, with more slots in its segment section.
+The first extended segment has 2 slots in its segment section.
+The second extended segment has 256 slots in its segment section.
+Each next extended segment has 128 more slots in its segment section than the previous.
+After a new extended segment is allocated, all the pointers from the segment section of the old extended segment are copied into the low slots of the segment section of new extended segment.
+This enables reaching the contents of a bucket by using the segment section of the current extended segment.
+The new extended segment does not immediately replace the old one.
+This happens when yet another (plain) segment must be allocated.
+
 \subsubsection{Shrinking}
+
+
 
 \subsection{Set}     % section 2.1
 \subsection{Bag}
 \subsection{Duplicate Bag}
+
+
 \subsection{Ordered Set}
 
 

@@ -2,7 +2,7 @@
 
 all: report.pdf
 
-report.pdf: report.tex
+report.pdf: report.tex report.bib
 	echo repomake 
 	cd ../benchmark ; \
 	gnuplot < create_graph.gp ; \
