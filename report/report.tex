@@ -25,7 +25,7 @@
   \begin{itemize}
    \item to get an understanding of the current implementation of the different ETS tables
    \item and to communicate this knowledge to for example the Erlang OTP team. 
-  \end{itemize}
+  \end{itemize} 
 
 \end{abstract}
 
@@ -299,29 +299,31 @@ end
 \label{fig:benchmark_results}
 \end{figure}
 
-  One can note note that the table type set with \verb|write_concurrency| enabled seems to give similar performance both with and without \verb|read_concurrency| enabled.
+  The table type \verb|set| with \verb|write_concurrency| enabled seems to give similar performance both with and without \verb|read_concurrency| enabled.
   All other configurations give similar performance to each other.
-  In this particular benchmark it seems like \verb|write_concurrency| for the table type set is particularly important for scalability.
-  For the other configurations the performance seems to get worse, when more than five worker processes are used.
-  It is reasonable to think that the reason for this is that write lock collisions become more frequent when more workers are added.
+  It is not surprising that all \verb|ordered_set| configurations perform similarly since the \verb|write_concurrency| and \verb|read_concurrency| options do not effect this table type at all.
+  The \verb|ordered_set| table type should theoretically have more expensive \verb|lookup| and \verb|insert| operations compared to the \verb|set| table type.
+  This does not seem to not have any significant effect on this benchmark.
   
+  In this particular benchmark it seems like \verb|write_concurrency| for the table type \verb|set| is particularly important for scalability.
+  For the other configurations the performance seems to get worse, when more than five worker processes are used.
+  It is reasonable to think that the reason for this is that the contention become higher when the number of workers is increased.
+
   
   
 \section{Scalable ETS Suggestions}
 
   The benchmark that is described in section~\ref{sec:benchmark}, shows that the fine grained locking provided by the \verb|write_concurrency| option can be very important for scalability.
   The number of locks used when fine grained locking is enabled is hard coded to 16 in the current implementation.
-  Therefore it would be possible to make the fine grained locking even more fine grained.
-  This could possible make ETS more scalable.
+  It would be possible to make the fine grained locking even more fine grained, since it could possibly make ETS more scalable.
   The benchmark described in section~\ref{sec:benchmark} has been run with a versions of the runtime environment with the number of locks set to 32 and 64.
   This did not seem to have any significant effect on the performance of the benchmark program.
   There might be other bottleneck in this particular benchmark that are more important.
   It would be interesting to look more deeply into how the number of locks effect the performance on other benchmarks.
   
-  
-  The benchmarks that are described in~\cite{ScottEtsJudy} about Judy-array based ETS table implementations, suggests that there are other table types that are significantly faster than the current ones for some use cases.
+  The benchmarks of Judy-array based ETS table implementations that are described in~\cite{ScottEtsJudy}, suggests that there are other table types that are significantly faster than the current ones for some use cases.
   There might also be be other alternative data structures for implementing ETS tables that perform better when accessed concurrently on multi core systems.
-  It would be interesting to look into other concurrent table implementations in other languages and compare them with the current ETS implementation.
+  It would be interesting to look into other concurrent table implementations and compare them with the current ETS implementation.
   
   The current ETS table implementation has no good support for use cases when more than one table operation need to be performed atomically.
   The only practical way to support that use case with the current ETS implementation is to serialize all access to the ETS table or ETS tables involved.
@@ -332,6 +334,9 @@ end
   An alternative would be to use references for terms that are stored in ETS tables. 
   Erlang already make use of references for large values of the binary data type.
   Therefore, it might be possible to reuse some existing components in the Erlang runtime system, to implement references for terms stored in the ETS tables with some potential performance benefits.
+  
+  The current \verb|ordered_set| table type only use one lock for the whole data structure.
+  There exist implementations of binary trees that scales much better than the current \verb|ordered_set| implementation and that have support for efficient traversal of the tree~\cite{BronsonPracTree}.
   
   
 
