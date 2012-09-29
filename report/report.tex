@@ -337,9 +337,7 @@ end
   
   The current \verb|ordered_set| table type only use one lock for the whole data structure.
   There exist implementations of binary trees that scales much better than the current \verb|ordered_set| implementation and that have support for efficient traversal of the tree~\cite{BronsonPracTree}.
-  
-  
-
+  The relaxed AVL-tree data-structures with STM inspired methods for thread safety suggested in~\cite{BronsonPracTree} could give much better scalability on a multi core computer than the existing \verb|ordered_set| implementation.
   
 
 \bibliographystyle{unsrt}  
