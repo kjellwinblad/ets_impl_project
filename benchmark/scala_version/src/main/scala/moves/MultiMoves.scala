@@ -1,12 +1,16 @@
+package moves
+
 import java.util.HashMap;
 import java.util.AbstractMap;
 import java.util.concurrent.ConcurrentHashMap;
 import scala.actors.Actor
+import scala.actors.TIMEOUT
 import scala.actors.Actor._
+import scala.annotation.tailrec
 
 object MultiMoves {
 
-	val BLACK = 'b'
+	val BLACK = 'b' 
 	val WHITE = 'w'
 	val EMPTY = 'e'
 
@@ -23,141 +27,151 @@ object MultiMoves {
 		moves(str, Runtime.getRuntime().availableProcessors())
 	}
 
-	def moves(array:String, nrOfWorkers:Int) =    
+	def moves(array:String, nrOfWorkers:Int):Int =    
     moves(array, nrOfWorkers, new ConcurrentHashMap[String, Boolean]())
 
 
-	def moves(array:String, nrOfWorkers:Int, cache:AbstractMap[String, Boolean]) = {
-    val workers = (1 to nrOfWorkers).map(startWorker(cache)).toArray
-    moves(List(array), -1, workers, nrOfWorkers, 0, cache)
+	def moves(array:String, nrOfWorkers:Int, cache:AbstractMap[String, Boolean]):Int = {
+    val workers = Array.fill(nrOfWorkers){startWorker(cache)}
+    moves(ConsL(List(array), Empty), -1, workers, nrOfWorkers, 0, cache)
 	}
 
 
 	abstract sealed class StrinContainer
 	case object Empty extends StrinContainer
-	case class ConsL(sc:StrinContainer, l:List[String]) extends StrinContainer
+	case class ConsL(l:List[String], sc:StrinContainer) extends StrinContainer
+	case class ConsC(sc1:StrinContainer, sc2:StrinContainer) extends StrinContainer
 
+	@tailrec
 	def moves(arrays:StrinContainer, 
 						movesSoFar:Int, 
-						workers:Actor, 
+						workers:Array[Actor], 
 						nrOfWorkers:Int, 
 						workPackagesLeft:Int, 
-						cache:AbstractMap[String, Boolean]) =  
+						cache:AbstractMap[String, Boolean]):Int =  
 		if(workPackagesLeft==0) {
     	if (isEmpty(arrays)) {
 	    	sendMsgToWorkers(workers, nrOfWorkers, 0, "stop")
  	    	reciveMsgFromWorkers(nrOfWorkers, "stopped")
 	    	-1;
-			else {
+    	} else {
 	    	divideWorkToWorkers(arrays, workers, nrOfWorkers, cache)
-	    	moves([], movesSoFar + 1, workers, nrOfWorkers, nrOfWorkers, cache)
+	    	moves(Empty, movesSoFar + 1, workers, nrOfWorkers, nrOfWorkers, cache)
 			}
-		} else {
-    	receive {
+		} else 
+    	receive { case m => m } match {
 				case "solution_found" => {
 	    		sendMsgToWorkers(workers, nrOfWorkers, 0, "stop")
- 	    		reciveMsgFromWorkers(NrOfWorkers, "stopped")
+ 	    		reciveMsgFromWorkers(nrOfWorkers, "stopped")
 	    		movesSoFar
 				}
-				case ("work_done", newWork) =>
-	    		calculateMoves(ConsL(newWork, arrays), movesSoFar, workers, nrOfWorkers, workPackagesLeft - 1, cache)
+				case ("work_done", newWork:StrinContainer) => 
+	    		moves(ConsC(newWork, arrays), movesSoFar, workers, nrOfWorkers, workPackagesLeft - 1, cache)
 			}
+		
+    
+
+	def divideWorkToWorkers(arrays:StrinContainer, workers:Array[Actor], nrOfWorkers:Int, cache:AbstractMap[String, Boolean]):Unit =
+    divideWorkToWorkers(arrays, workers, nrOfWorkers, 0, cache)
+
+	@tailrec
+	def divideWorkToWorkers(arrays:StrinContainer, workers:Array[Actor], nrOfWorkers:Int, currentWorker:Int, cache:AbstractMap[String, Boolean]):Unit =
+    if(nrOfWorkers == currentWorker)
+			divideWorkToWorkers(arrays, workers, nrOfWorkers, 0, cache)
+		else 
+			getNextAndRest(arrays) match {
+	    	case Empty =>
+		    	sendMsgToWorkers(workers, nrOfWorkers, 0, "level_completed")
+				case ConsL(List(work), remainingWork) => {
+		    	workers(currentWorker) ! ("do_work", work)
+		    	divideWorkToWorkers(remainingWork, workers, nrOfWorkers, currentWorker + 1, cache)
+				}
+				case _  => throw new Exception("Not expected result")
 		}
-    
 
-	def divideWorkToWorkers(arrays:StrinContainer, Workers, NrOfWorkers, Cache) ->
-    divide_work_to_workers(WorkList, Workers, NrOfWorkers, 0, Cache).
+	@tailrec
+	def sendMsgToWorkers(workers:Array[Actor], nrOfWorkers:Int, currentWorker:Int, msg:String):Unit =
+		if(nrOfWorkers != currentWorker){
+	  	workers(currentWorker) ! msg
+	    sendMsgToWorkers(workers, nrOfWorkers, currentWorker + 1, msg)
+		}
 
-divide_work_to_workers(Arrays, Workers, NrOfWorkers, CurrentWorker, Cache) ->
-    case NrOfWorkers =:= CurrentWorker of
-	true ->
-	    divide_work_to_workers(Arrays, Workers, NrOfWorkers, 0, Cache);
-	false ->
-	    R = get_next_and_rest(Arrays),
-	    case R of
-		empty ->
-		    send_msg_to_workers(Workers, NrOfWorkers, 0, level_completed);
-		{Work, RemainingWork} ->
-		    array:get(CurrentWorker, Workers) ! {do_work, Work},
-		    divide_work_to_workers(RemainingWork, Workers, NrOfWorkers, CurrentWorker + 1, Cache)
-	    end
-    end.
-
-
-send_msg_to_workers(Workers, NrOfWorkers, CurrentWorker, Msg) ->
-     case NrOfWorkers =:= CurrentWorker of
-	true ->
-	    ok;
-	false ->
-	    array:get(CurrentWorker, Workers) ! Msg,
-	    send_msg_to_workers(Workers, NrOfWorkers, CurrentWorker + 1, Msg)
-    end.
+	@tailrec
+	def reciveMsgFromWorkers(nrOfWorkers:Int, msg:String):Unit = {
+    receiveWithin(0) {case m => m} match {
+			case msg:String =>
+	    	reciveMsgFromWorkers(nrOfWorkers -1, msg);
+	    case TIMEOUT if(nrOfWorkers <= 0) =>
+	    	()
+	   	case _ =>
+	    	reciveMsgFromWorkers(nrOfWorkers, msg)
+    }
+     
+	    
+	}
 
 
-recive_msg_from_workers(NrOfWorkers, Msg) ->
-    receive
-	Msg ->
-	    recive_msg_from_workers(NrOfWorkers -1, Msg);
-	_ ->
-	    recive_msg_from_workers(NrOfWorkers, Msg)
-    after 0 ->
-	    case NrOfWorkers =< 0 of
-		true ->
-		    ok;
-		false ->
-		    recive_msg_from_workers(NrOfWorkers, Msg)
-	    end	    
-    end.
+	def isEmpty(arrays:StrinContainer) =
+    (getNextAndRest(arrays) == Empty)
 
+	@tailrec
+	def getNextAndRest(l:StrinContainer):StrinContainer = l match {
+		case Empty =>
+			Empty
+		case ConsL(Nil, rest) =>
+			getNextAndRest(rest)
+		case ConsL(e::restIn,rest) =>
+			 ConsL(List(e), ConsL(restIn, rest))
+		case ConsC(Empty,rest) =>
+			getNextAndRest(rest)
+		case ConsC(ConsC(c1,c2),rest) =>
+			getNextAndRest(ConsC(c1,ConsC(c2, rest)))
+		case ConsC(ConsL(l, rest1),rest2) =>
+			getNextAndRest(ConsL(l,ConsC(rest1,rest2)))
+	}
 
-is_empty(Arrays) ->
-    get_next_and_rest(Arrays) == empty.
+	
 
+	def startWorker(cache:AbstractMap[String, Boolean]) ={
+    val resultReciver = self
+    actor {
+    	worker(cache, Empty, resultReciver)
+    }
+	}
 
-get_next_and_rest([]) ->
-    empty;
-get_next_and_rest([[]|Rest]) ->
-    get_next_and_rest(Rest);
-get_next_and_rest([[E|RestIn]|RestO]) ->
-    get_next_and_rest([E, RestIn|RestO]);
-get_next_and_rest([E|Rest]) ->
-    {E, Rest}.
-    
+	@tailrec
+	def worker(cache:AbstractMap[String, Boolean], workDoneSoFar:StrinContainer, resultReciver:Actor):Unit =
+    receive {case m => m} match {
+			case "stop" =>
+	    	resultReciver ! "stopped"
+			case ("do_work", step:String) => {
+	    	val workResult = doWork(step, cache)
+	    	(workResult: @unchecked) match {
+					case "solution_found" => {
+		    		resultReciver ! "solution_found"
+		    		worker(cache, Empty, resultReciver)
+					}
+					case "blocker" =>  
+		    		worker(cache, workDoneSoFar, resultReciver);
+					case work:List[String]  =>
+		    		worker(cache, ConsL(work, workDoneSoFar), resultReciver)
+    		}
+    	}
+			case "level_completed" => {
+	    	resultReciver ! ("work_done", workDoneSoFar)
+	    	worker(cache, Empty, resultReciver)
+			}
+    }
 
-start_worker(Cache) ->
-    spawn(multi_4, worker, [Cache, [], self()]).
-
-
-worker(Cache, WorkDoneSoFar, ResultReciver) ->
-    receive
-	stop ->
-	    ResultReciver ! stopped;
-	{do_work, Step} ->
-	    Work = do_work(Step, Cache),
-	    case Work of
-		solution_found ->
-		    ResultReciver ! solution_found,
-		    worker(Cache, [], ResultReciver);
-		blocker ->
-		    worker(Cache, WorkDoneSoFar, ResultReciver);
-		_ ->
-		    worker(Cache, [Work, WorkDoneSoFar], ResultReciver)
-	    end;
-	level_completed ->
-	    ResultReciver ! {work_done, WorkDoneSoFar},
-	    worker(Cache, [], ResultReciver)
-    end.
-
-do_work(Step, Cache) ->
-    AnalyzeResult = analyze(Step),
-    case AnalyzeResult of
-	solution ->
-	    solution_found;
-	search_further ->
-	    all_next_step_arrays(Step, Cache);
-	has_blocker ->
-	    blocker
-    end.
+	def doWork(step:String, cache:AbstractMap[String, Boolean]) = 
+    analyze(step) match {
+    	case Solution =>
+	    	"solution_found"
+			case SearchFurther =>
+	    	allNextStepArrays(step, cache);
+			case HasBlocker =>
+	    	"blocker"
+		}
 
 	
 
@@ -170,6 +184,7 @@ case object SolutionPos  extends AnalyzeResult
 case object NotSolutionPos  extends AnalyzeResult
 case object BlockerPos  extends AnalyzeResult
 
+	@tailrec
 	def analyze(array:String, fromPos:Int, isSolutionToPos:Boolean):AnalyzeResult  = {
 		if(fromPos == array.size)
 			if(isSolutionToPos) Solution else SearchFurther
@@ -292,7 +307,7 @@ case object BlockerPos  extends AnalyzeResult
 		} else null
 
 	def main(args:Array[String]){
-     println(moves(""))
+     /*println(moves(""))
      println(moves("www"))
      println(moves("bee"))
      println(moves("bebw"))
@@ -314,7 +329,19 @@ case object BlockerPos  extends AnalyzeResult
      println(moves("bebebbeeeewwwbw"))
      println(moves("bwwebbewwebbbwbwwwebbw"))
      println(moves("bebebeeewewewewwe"))
-     println(moves("bebebeeewewbewwewe"))
+     println(moves("bebebeeewewbewwewe"))*/
+
+    def time[R](block: => R): R = {
+    	val t0 = System.nanoTime()
+    	val result = block    // call-by-name
+   	 	val t1 = System.nanoTime()
+    	println("Elapsed time: " + (t1 - t0) + "ns")
+  	  result
+		}
+
+		time {MultiMoves.moves("bebebeeewewbewweweebe")}
+
+		
 	}
 
 }

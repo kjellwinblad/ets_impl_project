@@ -1,3 +1,5 @@
+package moves
+
 import java.util.HashMap;
 import java.util.AbstractMap;
 
@@ -173,7 +175,7 @@ private case object BlockerPos  extends AnalyzePosResult
 				str.toString			
 		} else null
 
-	def main(args:Array[String]){
+	def mainA(args:Array[String]){
      println(moves(""))
      println(moves("www"))
      println(moves("bee"))
