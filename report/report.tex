@@ -17,7 +17,7 @@
 
 \begin{abstract}
 
-  This report describe in detail how the Erlang Term Storage (ETS) is implemented.
+  This report describes in detail how the Erlang Term Storage (ETS) is implemented.
   The report is created in the RELEASE project as the first step towards creating a more scalable ETS implementation.
   ETS tables are commonly used to share data between processes in Erlang programs.
   It is important to have a very good ETS implementation because shared data is often the bottleneck in concurrent applications.
@@ -171,18 +171,22 @@ The bucket id can be divided into two parts: a segment address and a bucket offs
 Initially the segment address is used as an index on the segment section of the current ``extended segment'', to find the base pointer of a bucket section.
 Then the bucket offset is used to find the bucket itself in the respective bucket section.
 
+Within each chain there is no ordering of the elements.
+New objects are appended at the end of a chain, as we might need to find and overwrite objects with the same key.
+
 \begin{figure}[htb]
 \centering
 \includegraphics[width=1.0\textwidth]{hash_table_structure.eps}
 \caption{Hash table structure} 
 \label{fig:hash_table_structure}
 \end{figure}
+
 \subsubsection{Growing}
 
+Growing is triggered after table insertion, when the total number of entries in the table exceeds a predefined value.
+Currently this value is set so that if a uniform distribution of elements is assumed, each bucket has a chain length of 6.
 Growing happens by splitting a bucket, moving elements to the bucket after the one that is currently active.
 The bucket to be split is the one at half the new bucket's index.
-Growing happens when the load of the table exceeds a predefined value.
-Currently this value is set so that if a uniform distribution of elements is assumed, each bucket has a chain length of 6.
 If the segment address of the new bucket corresponds to a slot in the index segment that is currently not pointing to a bucket section, a new plain bucket section is allocated and the slot is now pointing to its first entry.
 If this operation would assign a slot in the last slot of the segment section of currently active extended segment, a new extended segment is allocated instead, with more slots in its segment section.
 The first extended segment has 2 slots in its segment section.
@@ -196,22 +200,46 @@ This happens when yet another segment must be allocated.
 
 \subsubsection{Shrinking}
 
-Shrinking works in the reverse direction of growing.
-When the load falls below a preset limit, the active bucket with the highest index is 
+Shrinking may happen after deletion, if the total number of entries falls below a predefined value.
+Shrinking works in the reverse direction of growing:
+The active bucket with the highest index is merged with its corresponding ``low'' bucket.
 
-\subsection{Set}     % section 2.1
-\subsection{Bag}
-\subsection{Duplicate Bag}
+Shrinking might lead to the deallocation of a plain or extended bucket segment, if none of the buckets in it is active.
+Once the first bucket not accessible through the previous extended segment is deallocated, the previous extended segment is restored as current extended segment.
+This happens in order to avoid deallocating an extended segment while its segment table may still be used by other threads.
+When the extended segment is later deallocated, it has not been used for a very long time.
+It is even theoretically safe as we have by then rehashed the entire segment, seizing *all* locks, so there cannot exist any processes still executing code using the old extended segment pointer.
+For this to work, we must of course allocate a new extended segment one call earlier.
+This is also the reason why the minimum size of the first segment table is 2 and not 1 (NSEG\_1).
 
+\subsubsection{Hash table types}     % section 2.1
 
-\subsection{Ordered Set}
+With the underlying implementation being the same for all the types of hash tables, the specific type of the table introduces only minor differences in specific operations.
 
+\paragraph{Set}
+
+Insertion in set type tables should overwrite the existing value.
+It should also fail if the insertion is performed with a insert\_new operation.
+
+\paragraph{Bag, Duplicate Bag}
+
+Special care should be taken to include/skip keys with the same value.
+
+\subsection{Ordered Set table type}
 
 \section{Concurrency Options} \label{sec:concurrency_options}
 
+Read and write concurrency are orthogonal:
+write concurrency adds finer-level locks that can be used to read or write to particular sets of objects in the table, while read concurrency changes the type of all the locks used by the table.
+
 \subsection{Write Concurrency}
 
+The addition of finer-level locks is done only on hash-based tables that have either protected or public access rights.
+More details are provided in the relevant section.
+
 \subsection{Read Concurrency}
+
+[Changes mutex\_normal to mutex\_freq\_read]
 
 \section{Fixation}
 
@@ -228,6 +256,13 @@ In practice, this translates to the following 2 guarantees:
     \item Objects will not be moved between buckets due to table grow/shrink.
       This will guarantee that iterations do not miss keys or get double-hits.
 \end{enumerate}
+
+\subsection{Implementation}
+
+Fixation is monitored by a flag on the table itself and a mapping between PIDs and the identifiers of the tables that the respective process has fixated.
+The fixation flag is checked before growing or shrinking a table to make sure that possible split or merges won't lead into duplicate appearance of elements in a traversal.
+Objects on a fixed table are not deleted if there exist no other objects with the same key.
+Instead objects are marked with an ``invalid\_hash'' flag and added to a list with elements that must be deleted after the fixation has been lifted.
 
 \section{Benchmark} \label{sec:benchmark}
 
