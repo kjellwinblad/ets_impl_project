@@ -37,7 +37,7 @@ Erlang Term Storage (ETS) is a feature included in the Erlang runtime system.
 It supports storage of Erlang tuples in ETS tables which are outside the processes' heaps.
 This prevents garbage collection from copying these tuples while collecting memory space from a process' heap and can also be used to efficiently share data between processes. %I don't understand the part about garbage collection
 An Erlang ETS table behaves as if a dedicated process serves requests for insertions, lookups and other common operations on a key value dictionary, but is implemented in a more efficient way.
-Most of the operations on an ETS table are implemented as built-in functions (BIFs) of the Erlang runtime system. 
+Most of the operations on an ETS table are implemented as built-in functions (BIFs) in the Erlang runtime system. 
 An ETS table can be accessed by either a \emph{table identifier} (TID) or an atom (in case of a \emph{named} table).
 In either case the identifier for the table is returned by the call to the \verb|ets:new/2| BIF.
 The \verb|ets:new/2| BIF can also take a list of options that specify: 
@@ -45,7 +45,7 @@ The \verb|ets:new/2| BIF can also take a list of options that specify:
 \begin{itemize}
 \item 
   The access level for the table which can be \verb|private|, \verb|protected| or \verb|public|.
-  See the Erlang documentation for \verb|ets:new| for more information about these options.
+  See the Erlang documentation for \verb|ets:new| for more information about these options\footnote{http://www.erlang.org/doc/man/ets.html}.
 \item
   Whether the table is a \verb|named_table|, in which case the atom provided as a table name can be used instead of the TID in table operations.
 \item 
@@ -64,7 +64,7 @@ If a process has been specified with the \verb|heir| option, it will receive a m
 \subsection{Overview of Table Operations}
 
 This section gives an overview of the most fundamental ETS table operations. 
-See the Erlang documentation\footnote{http://www.erlang.org/doc/man/ets.html} for ETS tables for a complete description of all table operations. 
+See the Erlang documentation for ETS tables for a complete description of all table operations. 
 See section~\ref{sec:table_types} for information about the data-structures used in the tables.
 
 \begin{description}
@@ -122,6 +122,9 @@ Low level operations like finding the main data structure for a specific table o
 \subsection{Locking} \label{sec:tables_locking}
 
 Different levels of locking are required for each operation on an ETS table.
+In general, the same lock data structure is used for both read and write on the data protected by the lock and operations request and obtain different levels of access.
+For example, acquisition of the lock to read the data should not block other readers but should block all the writers until the lock is released.
+Similarly, acquisition of the lock to write on the data should block both readers and writers trying to access the same data.
 
 \begin{itemize}
 \item Creation and deletion of a table require the acquisition of the write lock protecting the \verb|meta_main_table|.
@@ -145,10 +148,10 @@ Hash tables distribute their key-value entries to buckets, depending on a hash v
 
 \subsubsection{Fine Locking}
 
-Protected and public hash tables support fine locking if created with the \verb|write_concurrency| option.
+Protected and public hash tables support fine locking if the option \verb|write_concurrency| is provided during creation.
 In this case an array of locks is allocated during table creation and each lock protects a subset of the buckets.
 The size of the lock array is defined at \emph{compile time} and is currently set to 16.
-Each lock protects those buckets whose id modulo 16 equals the slot's id.
+(Therefore each lock ``protects'' those buckets whose index modulo 16 equals the lock's index.)
 
 \subsubsection{Data Structure}
 
@@ -197,7 +200,7 @@ The first extended segment has 2 slots in its segment section.
 The second extended segment has 256 slots in its segment section.
 Each next extended segment has 128 more slots in its segment section than the previous.
 After a new extended segment is allocated, all the pointers from the segment section of the old extended segment are copied into the low slots of the segment section of new extended segment.
-This leads to duplication, but enables reaching the contents of a bucket by using the segment section of just the current extended segment.
+This leads to duplication (the same plain bucket sections are accessible from multiple extended segment sections), but enables reaching the contents of a bucket by using the segment section of just the current extended segment.
 The new extended segment does not immediately replace the old one.
 This happens when yet another segment must be allocated.
 (This will be a plain segment, stored in the segment section of the new extended segment.)
@@ -211,8 +214,7 @@ The active bucket with the highest index is merged with its corresponding ``low'
 Shrinking might lead to the deallocation of a plain or extended bucket segment, if none of the buckets in it is active.
 Once the first bucket not accessible through the previous extended segment is deallocated, the previous extended segment is restored as current extended segment.
 This happens in order to avoid deallocating an extended segment while its segment table may still be used by other threads.
-When the extended segment is later deallocated, it has not been used for a very long time.
-It is even theoretically safe as we have by then rehashed the entire segment, seizing *all* locks, so there cannot exist any processes still executing code using the old extended segment pointer.
+When the extended segment is later deallocated, the contents of all the buckets in the bucket section have been rehashed, seizing *all* locks, so there cannot exist any processes still executing code using the old extended segment pointer.
 For this to work, we must of course allocate a new extended segment one call earlier.
 This is also the reason why the minimum size of the first segment table is 2 and not 1 (NSEG\_1).
 
@@ -222,7 +224,7 @@ With the underlying implementation being the same for all the types of hash tabl
 
 \paragraph{Set}
 
-Insertion in set type tables should overwrite the existing value.
+Insertion in tables of \verb|set| type should overwrite the existing value.
 It should also fail if the insertion is performed with a insert\_new operation.
 
 \paragraph{Bag, Duplicate Bag}
