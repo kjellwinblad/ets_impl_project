@@ -17,7 +17,7 @@
 
 \begin{abstract}
 
-  This report describe in detail how the Erlang Term Storage (ETS) is implemented.
+  This report describes in detail how the Erlang Term Storage (ETS) is implemented.
   The report is created in the RELEASE project as the first step towards creating a more scalable ETS implementation.
   ETS tables are commonly used to share data between processes in Erlang programs.
   It is important to have a very good ETS implementation because shared data is often the bottleneck in concurrent applications.
@@ -229,9 +229,17 @@ Special care should be taken to include/skip keys with the same value.
 
 \section{Concurrency Options} \label{sec:concurrency_options}
 
+Read and write concurrency are orthogonal:
+write concurrency adds finer-level locks that can be used to read or write to particular sets of objects in the table, while read concurrency changes the type of all the locks used by the table.
+
 \subsection{Write Concurrency}
 
+The addition of finer-level locks is done only on hash-based tables that have either protected or public access rights.
+More details are provided in the relevant section.
+
 \subsection{Read Concurrency}
+
+[Changes mutex\_normal to mutex\_freq\_read]
 
 \section{Fixation}
 
@@ -248,6 +256,13 @@ In practice, this translates to the following 2 guarantees:
     \item Objects will not be moved between buckets due to table grow/shrink.
       This will guarantee that iterations do not miss keys or get double-hits.
 \end{enumerate}
+
+\subsection{Implementation}
+
+Fixation is monitored by a flag on the table itself and a mapping between PIDs and the identifiers of the tables that the respective process has fixated.
+The fixation flag is checked before growing or shrinking a table to make sure that possible split or merges won't lead into duplicate appearance of elements in a traversal.
+Objects on a fixed table are not deleted if there exist no other objects with the same key.
+Instead objects are marked with an ``invalid\_hash'' flag and added to a list with elements that must be deleted after the fixation has been lifted.
 
 \section{Benchmark} \label{sec:benchmark}
 
