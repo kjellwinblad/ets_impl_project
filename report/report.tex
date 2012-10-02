@@ -20,11 +20,11 @@
   This report describes in detail how the Erlang Term Storage (ETS) is implemented.
   The report is created in the RELEASE project as the first step towards creating a more scalable ETS implementation.
   ETS tables are commonly used to share data between processes in Erlang programs.
-  It is important to have a very good ETS implementation because shared data is often the bottleneck in concurrent applications.
+  It is important to have a scalable ETS implementation because shared data is often the bottleneck in concurrent applications.
   The main goals of the report are:
   \begin{itemize}
    \item to get an understanding of the current implementation of the different ETS tables
-   \item and to communicate this knowledge to for example the Erlang OTP team. 
+   \item to communicate this knowledge (for example to the Erlang OTP team)
   \end{itemize} 
 
 \end{abstract}
@@ -33,33 +33,33 @@
 
 \section{Introduction}
 
-Erlang Term Storage (ETS) support is included in Erlang runtime system.
-ETS tables are used to store Erlang tuples outside the processes' heaps.
+Erlang Term Storage (ETS) is a feature included in the Erlang runtime system.
+It supports storage of Erlang tuples in ETS tables which are outside the processes' heaps.
 This prevents garbage collection from copying these tuples while collecting memory space from a process' heap and can also be used to efficiently share data between processes. %I don't understand the part about garbage collection
 An Erlang ETS table behaves as if a dedicated process serves requests for insertions, lookups and other common operations on a key value dictionary, but is implemented in a more efficient way.
 Most of the operations on an ETS table are implemented as built-in functions (BIFs) of the Erlang runtime system. 
 An ETS table can be accessed by either a \emph{table identifier} (TID) or an atom (in case of a \emph{named} table).
 In either case the identifier for the table is returned by the call to the \verb|ets:new/2| BIF.
-The \verb|ets:new/2| BIF can take a list of options that specify: 
+The \verb|ets:new/2| BIF can also take a list of options that specify: 
 
 \begin{itemize}
 \item 
-  The access level which can be \verb|private|, \verb|protected| and \verb|public|.
+  The access level for the table which can be \verb|private|, \verb|protected| or \verb|public|.
   See the Erlang documentation for \verb|ets:new| for more information about these options.
 \item
   Whether the table is a \verb|named_table|, in which case the atom provided as a table name can be used instead of the TID in table operations.
 \item 
-  Whether the table type shall be \verb|set|, \verb|bag |, \verb|duplicate_bag| or \verb|ordered_set|. 
+  Whether the table type is \verb|set|, \verb|bag |, \verb|duplicate_bag| or \verb|ordered_set|. 
   See section~\ref{sec:table_types} for information about the data-structures used in the different table types.
 \item 
-  Whether fine grained locking is enabled for read and write operations (specified with the options \verb|write_concurrency| and \verb|read_concurrency|). 
+  Whether fine grained and/or faster locking is enabled for read and write operations (specified with the options \verb|write_concurrency| and \verb|read_concurrency|). 
   See section~\ref{sec:concurrency_options} and \ref{sec:benchmark} for more information about these options.
 \end{itemize}
 
-ETS tables are owned by the creating process as long as the creating process is alive unless the ownership has been passed to another process with the BIF \verb|ets:give_away|.
-If the owner of an ETS table terminates the table will be deleted, if the \verb|heir| option is not set.
-The programmer can use the \verb|heir| option, or the \verb|set_heir| BIF to specify a process that will inherit the table when the current owner terminates. 
-If a process has been specified with the \verb|heir| option it will receive a message signalling the transfer of table ownership, when the previous owner terminates.
+ETS tables are owned by the creating process as long as the creating process is alive, unless the ownership has been passed to another process with the \verb|ets:give_away| operation.
+If the owner of an ETS table terminates the table will be deleted, unless the \verb|heir| option is set.
+Developers can use the \verb|heir| option (only during creation) or the \verb|set_heir| BIF (at anytime) to specify a process that will inherit the table when the current owner terminates. 
+If a process has been specified with the \verb|heir| option, it will receive a message signalling the transfer of table ownership, when the previous owner terminates.
 
 \subsection{Overview of Table Operations}
 
@@ -69,12 +69,9 @@ See section~\ref{sec:table_types} for information about the data-structures used
 
 \begin{description}
  \item[lookup(Tab, Key) $\rightarrow$ [Object]] 
- Returns a list of elements that have the given key. 
- Calls to \verb|lookup| and \verb|insert| can be done concurrently if \verb|read_concurrency| is activated.
+ Returns a list of objects that have the given key. 
  \item[insert(Tab, ObjectOrObjects) $\rightarrow$ true]
  Insert the given object (or objects, if the parameter is a list of objects) to the table.
- Several inserts can be done concurrently if \verb|write_concurrency| is activated when \verb|set|, \verb|bag | or \verb|duplicate_bag| is used.
- If a write operation can be done concurrently, a read operation involving the same kay can also be done concurrently.
  \item[insert\_new(Tab, ObjectOrObjects) $\rightarrow$ true]
  This operation will insert the given object or objects if no object with the same key as any of the object(s) exists. 
  If a key already exists the operation will return false.
@@ -86,34 +83,40 @@ See section~\ref{sec:table_types} for information about the data-structures used
 \section{Previous Work}
 
   Scott Lystig Fritchie has suggested a new ETS table type based on Judy-arrays~\cite{ScottEtsJudy}.
-  In~\cite{ScottEtsJudy}, the performance of a Judy-array based implementation of ETS tables is experimentally compared to the currently available table types.
-  For large table sizes the operations lookup, insert and update seems to be faster with the Judy-array based implementation.
-  However term deletion and table traversal seems to be slower in the Judy-array based implementation.
-  The benchmarks in~\cite{ScottEtsJudy} do not test how the implementation performs when operations are performed concurrently.
+  In this work [the performance of a Judy-array based implementation of ETS tables is experimentally compared to the currently available table types.] <- Rephrase?
+  For large table sizes the operations lookup, insert and update seem to be faster with the Judy-array based implementation.
+  However term deletion and table traversal seem to be slower in the Judy-array based implementation.
+  The benchmarks in the paper not test how the implementation performs when operations are performed concurrently.
   
   Patrik Nyblom has suggested the addition of software transactional memory (STM) support for Erlang ETS tables~\cite{PatrikErlangTrans}.
-  STM support could be added to Erlang with only minor changes to the ETS implementation \cite{PatrikErlangTrans}.
-  The implementation suggested in~\cite{PatrikErlangTrans} would not effect the performance of ETS when the transactional features are not used.
+  It is argued that STM support could be added to Erlang with only minor changes to the ETS implementation.
+  The suggested implementation would not effect the performance of ETS when the transactional features are not used.
   At the same time it could increase parallelism for use cases where the only alternative without transactional memory support is to serialize all operations on the ETS table (or tables).
-  Benchmark results provided in~\cite{PatrikErlangTrans} for a prototype of ETS with transactional memory, show that transactional memory support for ETS could make some use cases much more scalable with the number of cores.
+  Benchmark results for a prototype of ETS with transactional memory, show that transactional memory support for ETS could make some use cases more scalable with the number of cores.
   
 
 \section{Handling of Tables}
 
 The infrastructure for the handling of tables is described in this section. 
-An overview of the data-structures involved is provided in section~\ref{sec:tables_overview}.
+An overview of the data-structures used on a global level is provided in section~\ref{sec:tables_overview}.
 How locking is done when tables are accessed concurrently is described in section~\ref{sec:tables_locking}.
 
-\subsection{Overview} \label{sec:tables_overview}
+\subsection{Global data structures}
+\label{sec:tables_overview}
 
-\subsubsection{Global data structures}
+The following data structures are maintained on a system-wide level and are used for ``generic book-keeping''.
+Low level operations like finding the main data structure for a specific table or handling ownership trasfers use only these data structures.
 
 \begin{description}
-  \item[meta\_main\_table] Contains all the tables. TIDs map to a slot.
-  \item[meta\_name\_table] Keys are atoms, values are TIDs.
-  \item[meta\_pid\_to\_tab] Maps processes (PIDs) to tables owned by them.
-  \item[meta\_pid\_to\_fixed\_tab] Maps processes (PIDs) to tables that are
-    fixated by them.
+\item[meta\_main\_table]
+  Contains pointers to the main data structure of all the tables that exis currently in the system.
+  TIDs map to a slot in this table.
+\item[meta\_name\_table]
+  Contains mappings from the names of named tables to the repective TIDs.
+\item[meta\_pid\_to\_tab]
+  Maps processes (PIDs) to tables owned by them.
+\item[meta\_pid\_to\_fixed\_tab]
+  Maps processes (PIDs) to tables that are fixated by them.
 \end{description}
 
 \subsection{Locking} \label{sec:tables_locking}
@@ -149,29 +152,30 @@ Each lock protects those buckets whose id modulo 16 equals the slot's id.
 
 \subsubsection{Data Structure}
 
-The current implementation of ETS tables is based on linear dynamic hash tables~\cite{Larson}.
+The current implementation\footnote{All the particular sizes mentioned reflect faithfully the current implementation.} of ETS tables is based on linear dynamic hash tables~\cite{Larson}.
 The main data structure is called ``extended segment'' and has two parts:
 \begin{enumerate}
   \item A ``bucket'' section, containing 256 pointers to lists of the key-value pairs that belong to the respective bucket.
-    This corresponds to the regular ``chaining'' implementation of a hash table.
+    These lists correspond to the common ``chaining'' implementation of a hash table.
   \item A ``segment'' section, pointing to ``bucket'' sections.
 \end{enumerate}
 The runtime system can also allocate plain ``bucket'' sections, without ``segment'' sections attached.
-As an invariant, the entry point for all access is a ``current'' extended segment, but there might also exist ``previous'' extended segments.
+As an invariant, the entry point for all access is a ``current'' extended segment, but there might also exist ``previous'' extended segments that are still used for their bucket sections and may be used again for their segment sections if the table is shrinked.
 
-As an invariant, a continuous range of buckets (starting with bucket 0) marks the  ``active'' buckets.
+As an invariant, a continuous range of buckets (starting with bucket 0) is declared as ``active'' buckets.
 The index of the highest active bucket is stored as \verb|nactive|.
 
-To operate with some element of the table, the hash value of the key of the element is first calculated.
-This hash value is then mapped to the id of a bucket of the table, using the least significant bits of the hash value.
-If the bucket is active, this is the actual index of the bucket.
-If the bucket is not active, another significant bit is dropped, and the bucket at half the previous index is used instead.
+To operate with some object of the table, the hash value of the key of the object is first calculated.
+This hash value is then mapped to the index of a bucket of the table, masking some of the least significant bits of the hash value, depending on the index of the highest active bucket.
+If the index obtained through this masking corresponds to a bucket that is active, this is the bucket that should contain the object.
+If the bucket is not active, another significant bit is dropped, and the bucket with the resulting index value is used instead.
 
-The bucket id can be divided into two parts: a segment address and a bucket offset.
-Initially the segment address is used as an index on the segment section of the current ``extended segment'', to find the base pointer of a bucket section.
-Then the bucket offset is used to find the bucket itself in the respective bucket section.
+The bucket id itself can be divided in two parts: a segment address and a bucket offset.
+The segment address is first used as an index on the segment section of the current ``extended segment'', to find the base pointer of a bucket section.
+Then the bucket offset is used to find the specific bucket in the bucket section.
 
-Within each chain there is no ordering of the elements.
+Under each bucket there exists a chain of hash values that map to it.
+Within each such chain there is no ordering of the objects.
 New objects are appended at the end of a chain, as we might need to find and overwrite objects with the same key.
 
 \begin{figure}[htb]
@@ -184,8 +188,8 @@ New objects are appended at the end of a chain, as we might need to find and ove
 \subsubsection{Growing}
 
 Growing is triggered after table insertion, when the total number of entries in the table exceeds a predefined value.
-Currently this value is set so that if a uniform distribution of elements is assumed, each bucket has a chain length of 6.
-Growing happens by splitting a bucket, moving elements to the bucket after the one that is currently active.
+Currently this value is set so that if a uniform distribution of objects is assumed, each bucket has a chain length of 6.
+Growing happens by splitting a bucket, moving objects to the bucket after the one that is currently active.
 The bucket to be split is the one at half the new bucket's index.
 If the segment address of the new bucket corresponds to a slot in the index segment that is currently not pointing to a bucket section, a new plain bucket section is allocated and the slot is now pointing to its first entry.
 If this operation would assign a slot in the last slot of the segment section of currently active extended segment, a new extended segment is allocated instead, with more slots in its segment section.
@@ -227,6 +231,9 @@ Special care should be taken to include/skip keys with the same value.
 
 \subsection{Ordered Set table type}
 
+The ordered set table type is implemented with an AVL tree.
+There exists no fine locking.
+
 \section{Concurrency Options} \label{sec:concurrency_options}
 
 Read and write concurrency are orthogonal:
@@ -260,9 +267,9 @@ In practice, this translates to the following 2 guarantees:
 \subsection{Implementation}
 
 Fixation is monitored by a flag on the table itself and a mapping between PIDs and the identifiers of the tables that the respective process has fixated.
-The fixation flag is checked before growing or shrinking a table to make sure that possible split or merges won't lead into duplicate appearance of elements in a traversal.
+The fixation flag is checked before growing or shrinking a table to make sure that possible split or merges won't lead into duplicate appearance of objects in a traversal.
 Objects on a fixed table are not deleted if there exist no other objects with the same key.
-Instead objects are marked with an ``invalid\_hash'' flag and added to a list with elements that must be deleted after the fixation has been lifted.
+Instead objects are marked with an ``invalid\_hash'' flag and added to a list with objects that must be deleted after the fixation has been lifted.
 
 \section{Benchmark} \label{sec:benchmark}
 
@@ -372,7 +379,7 @@ end
   Transactional support for ETS tables as suggested in~\cite{PatrikErlangTrans} could be a way to support this use case in a much more scalable way.
   
   In the current implementation of ETS, all terms that are inserted or fetched from an ETS table are copied from or to the ETS table.
-  This might be expensive both in respect to time and memory if a lot of processes access the same elements in the table.
+  This might be expensive both in respect to time and memory if a lot of processes access the same objects in the table.
   An alternative would be to use references for terms that are stored in ETS tables. 
   Erlang already make use of references for large values of the binary data type.
   Therefore, it might be possible to reuse some existing components in the Erlang runtime system, to implement references for terms stored in the ETS tables with some potential performance benefits.
