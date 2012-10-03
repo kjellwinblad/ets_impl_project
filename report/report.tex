@@ -280,36 +280,35 @@ Instead objects are marked with an ``invalid\_hash'' flag and added to a list wi
 \section{Benchmark} \label{sec:benchmark}
 
   A simple benchmark has been performed.
-  The purpose of the benchmark is to see how the \verb|write_concurrency| and \verb|read_concurrency| options affect the performance of different table types on a real world problem.
+  The purpose of the benchmark is to see how the \verb|write_concurrency| and \verb|read_concurrency| options affect the performance of different table types on a ''real world'' problem.
   The benchmark creates workers that all do \verb|lookup|s and \verb|insert|s on the same ETS table.
-  The benchmark was done on a computer with 64 cores.
-  The benchmark was run with all combinations of \verb|write_concurrency| and \verb|read_concurrency| together with the table types \verb|set| and \verb|ordered_set|.
+  It was run on a computer with 64 cores (AMD Bulldozer Architecture).
+  It was run with all combinations of \verb|write_concurrency| and \verb|read_concurrency| together with the table types \verb|set| and \verb|ordered_set|.
   
   \subsection{Benchmark Problem}
-    The benchmark program finds the minimum number of sort steps to sort an array.
-    The array contains \emph{black} marks, \emph{white} marks and \emph{empty} positions.
-    The sequence \verb|"ebbwe"| can represent an array, where an \verb|e| represent an \emph{empty} position, a \verb|w| represent a \emph{white} mark and an \verb|b| represents a \emph{black} mark.
+    The benchmark program finds the minimum number of sort steps to sort an array, containing \emph{black} marks, \emph{white} marks and \emph{empty} positions.
+    As an example the sequence \verb|"ebbwe"| represents such an array, with \verb|e| marking \emph{empty} position, \verb|w| representing \emph{white} mark and \verb|b| representing \emph{black} mark.
     Black marks can only move towards the right end of the array and white marks can only move towards the left end.
     In one sort step a mark can:
     \begin{itemize}
-     \item move one step in the array if the neighbor position in the direction of the movement is empty or
-     \item move two steps in the array if the neighbor position in the direction of the movement contains a mark and the position after the neighbor position is empty.
+     \item move one step in the array if the adjacent position in the direction of the movement is \emph{empty} or
+     \item move two steps in the array, if the adjacent position in the direction of the movement contains \emph{a mark} and the position after the adjacent position is \emph{empty}.
     \end{itemize}
-    A sorted array has all white marks as far to the left in the array as possible and all black marks as far to the right in the array as possible.
-    Some input arrays can not be sorted with the given constraints, e.g. \verb|"bbww"|.
+    A sorted array has all white marks in the leftmost positions and all black marks in the rightmost positions.
+    Some input arrays are impossible to sort with the given constraints, e.g. \verb|"bbww"|.
     If the input array can not be sorted the program shall return $-1$.
     For example the minimum number of steps for \verb|"ebbwe"| is $5$.
-    The benchmark timed the time it took to return the result for the arrays \verb|"bebebbeeeewwwbw"|, \verb|"bebebeeewewewewwe"|.
+    The benchmark measures time needed to return the result for the arrays \verb|"bebebbeeeewwwbw"| and \verb|"bebebeeewewewewwe"|.
     
   \subsection{Implementation}
-    The Erlang program that solves the benchmark problem is available at www.github.com\footnote{http://github.com/kjellwinblad/ets\_impl\_project/blob/master/benchmark/multi\_4.erl}.
-    The program explores the the possible solutions using breadth first search.
+    The Erlang program that solves the benchmark problem is available on www.github.com\footnote{http://github.com/kjellwinblad/ets\_impl\_project/blob/master/benchmark/multi\_4.erl}.
+    The program explores the possible solutions using breadth first search.
     Explored configurations are saved in an ETS table to avoid repeating work.
     
     The program has one coordinator process and a number of worker processes.
     At a specific level in the search tree, the coordinator divides the configurations that needs to be explored in the next level evenly and sends them to the workers.
     The workers send a message to the coordinator if a solution is found.
-    If a worker finds a configuration that is not a solution, it is expanded by generating all possible configurations that can be created by performing one sort step.
+    If a worker gets a configuration that is not a solution, it is expanded by generating all possible configurations that can be created by performing one sort step.
     
     Directly after a configuration is generated, it is checked whether it already exists in the ETS table cache with the \verb|ets:member| function.
     If it already exists, it is thrown away because the configuration has already been visited.
@@ -334,14 +333,14 @@ case IsFound of
 end
 \end{lstlisting}
     
-    A worker sends back all the configurations that needs to be explored in the next level to the coordinator, when it has processed all given configurations on the current level.
+    A worker sends back all the configurations that need to be explored in the next level to the coordinator, when it has processed all given configurations on the current level.
 
 
 \subsection{Results}
 
   The results of the benchmark can be seen in figure~\ref{fig:benchmark_results}.
-  The filled straight line labeled \emph{serial} is the performance of a serial version of benchmark program.
-  The serial version can also be found at www.github.com\footnote{http://github.com/kjellwinblad/ets\_impl\_project/blob/master/benchmark/single\_1.erl}.
+  The filled straight line labeled \emph{serial} is the performance of a serial version of the benchmark program.
+  The serial version can also be found on www.github.com\footnote{http://github.com/kjellwinblad/ets\_impl\_project/blob/master/benchmark/single\_1.erl}.
   The graphs with \emph{set} in the label show the benchmark times for the table type \verb|set|.
   The graphs with \emph{ordset} in the label show the benchmark times for the table type \verb|ordered_set|.
   A \emph{w} in the label means that the table has \verb|write_concurrency| enabled and an \emph{r} in the label means that the table has \verb|read_concurrency| enabled.
@@ -355,34 +354,33 @@ end
 \end{figure}
 
   The table type \verb|set| with \verb|write_concurrency| enabled seems to give similar performance both with and without \verb|read_concurrency| enabled.
-  All other configurations give similar performance to each other.
+  All other configurations have similar performance.
   It is not surprising that all \verb|ordered_set| configurations perform similarly since the \verb|write_concurrency| and \verb|read_concurrency| options do not affect this table type at all.
   The \verb|ordered_set| table type should theoretically have more expensive \verb|lookup| and \verb|insert| operations compared to the \verb|set| table type.
   This does not seem to have any significant effect on this benchmark.
   
-  In this particular benchmark it seems like \verb|write_concurrency| for the table type \verb|set| is particularly important for scalability.
+  In this particular benchmark it is evident that \verb|write_concurrency| for the table type \verb|set| is particularly important for scalability.
   For the other configurations the performance seems to get worse, when more than five worker processes are used.
-  It is reasonable to assume that the reason for this is that the contention become higher when the number of workers is increased.
+  It is reasonable to assume that the reason behind that is that contention becomes higher when the number of workers is increased.
 
   
   
 \section{Scalable ETS Suggestions}
 
-  The benchmark that is described in section~\ref{sec:benchmark}, shows that the fine grained locking provided by the \verb|write_concurrency| option can be very important for scalability.
-  The number of locks used when fine grained locking is enabled is hard coded to 16 in the current implementation.
+  The benchmark described in section~\ref{sec:benchmark}, shows that fine grained locking (provided by the \verb|write_concurrency| option) can be very important for scalability.
+  The number of locks used when fine grained locking is enabled is hard-coded to 16 in the current implementation.
   It is tempting to make the locking even more fine grained, since it could possibly make ETS more scalable.
-  However, it might increase processor cache misses and have other unforeseen effects so it is not certain that it will give better scalability. 
-  
+  However, it might increase processor cache misses and have other unforeseen effects so it is not certain that it will give better scalability.   
   The benchmark described in section~\ref{sec:benchmark} has also been run with a versions of the runtime environment with the number of locks set to 32 and 64.
   This change did not seem to have any significant effect on the performance of the benchmark program.
   There might be other bottleneck in this particular benchmark that are more important.
-  It would be interesting to look more deeply into how the number of locks effect the performance on other benchmarks.
+  It would be interesting to look more deeply into how the number of locks affects the performance of other benchmarks.
   
   The benchmarks of Judy-array based ETS table implementations that are described by Fritchie, suggests that there are other table implementations that are significantly faster than the current ones for some use cases~\cite{ScottEtsJudy}.
-  Fritcie did not discuss how to make the Judy-array based ETS table implementation concurrent.
-  Prokopec, Bagwell and Odersky have described a ''lock-free'' concurrent data type called CTrie which is similar to the ETS table implementation suggested by Fritcie~\cite{ProkopecCTrie}.
+  Fritchie did not discuss how to make the Judy-array based ETS table implementation concurrent.
+  Prokopec, Bagwell and Odersky have described a ''lock-free'' concurrent data type called CTrie which is similar to the ETS table implementation suggested by Fritchie~\cite{ProkopecCTrie}.
   Benchmarks indicate that CTries scales well compared to many other concurrent table implementations~\cite{ProkopecCTrie}.
-  Adding a CTrie data type as an Erlang ETS table type could potentially provide better scalability than the current implementation.
+  Using a CTrie to implement ETS tables could potentially provide better scalability than the current implementation.
   
   The current ETS table implementation has no good support for use cases when more than one table operation need to be performed atomically.
   The only practical way to support that use case with the current ETS implementation is to serialize all access to the ETS table or ETS tables involved.
@@ -391,13 +389,17 @@ end
   In the current implementation of ETS, all terms that are inserted or fetched from an ETS table are copied from or to the ETS table.
   This might be expensive both in respect to time and memory if many processes access the same objects in the table.
   An alternative would be to use references for terms that are stored in ETS tables. 
-  The Erlang runtime already uses references for large values of the binary data type.
+  The Erlang runtime already uses references for values of the binary data type.
   Therefore, it might be possible to reuse some existing components in the Erlang runtime system, to implement references for terms stored in the ETS tables with some potential performance benefits.
   
   The current \verb|ordered_set| table type uses only one lock for the whole data structure. 
-  There exist implementations of binary trees that scale much better than the current \verb|ordered_set| implementation and that have support for efficient traversal of the tree.
+  There exist implementations of binary trees that scale well and that have support for efficient traversal of the tree.
   Bronson, Casper, Chafi and Olukotun have described a relaxed AVL-tree data-structure with STM inspired methods for thread safety~\cite{BronsonPracTree}.
   This implementation could give much better scalability on a multi-core computer than the current \verb|ordered_set| implementation.
+  
+  Furthermore, there are many more concurrent implementation of lookup tables that could be used in ETS and potentially provide better scalability.
+  It could be interesting to do a more in depth study of the implementation that are in use today.
+  For example \verb|ConcurrentHashMap| in the Java library does not require any locks for lookup operations \cite{BrianConcHashMap}.
   
 
 \bibliographystyle{unsrt}  
