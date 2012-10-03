@@ -20,10 +20,10 @@
   This report describes in detail how the Erlang Term Storage (ETS) is implemented.
   The report is created in the RELEASE project as the first step towards creating a more scalable ETS implementation.
   ETS tables are commonly used to share data between processes in Erlang programs.
-  It is important to have a scalable ETS implementation because shared data is often the bottleneck in concurrent applications.
+  It is important to have a scalable ETS implementation because shared data is often the bottleneck in parallel applications.
   The main goals of the report are:
   \begin{itemize}
-   \item to get an understanding of the current implementation of the different ETS tables
+   \item to get an understanding of the current implementation of ETS tables
    \item to communicate this knowledge (for example to the Erlang OTP team)
   \end{itemize} 
 
@@ -36,10 +36,10 @@
 Erlang Term Storage (ETS) is a feature included in the Erlang runtime system.
 It supports storage of Erlang tuples in ETS tables which are outside the processes' heaps.
 This prevents garbage collection from copying these tuples while collecting memory space from a process' heap and can also be used to efficiently share data between processes. %I don't understand the part about garbage collection
-An Erlang ETS table behaves as if a dedicated process serves requests for insertions, lookups and other common operations on a key value dictionary, but is implemented in a more efficient way.
+An Erlang ETS table behaves as if a dedicated process served requests for insertions, lookups and other common operations on a key value dictionary, but is implemented in a more efficient way.
 Most of the operations on an ETS table are implemented as built-in functions (BIFs) in the Erlang runtime system. 
 An ETS table can be accessed by either a \emph{table identifier} (TID) or an atom (in case of a \emph{named} table).
-In either case the identifier for the table is returned by the call to the \verb|ets:new/2| BIF.
+In either case the identifier for the table is given by the call to the \verb|ets:new/2| BIF.
 The \verb|ets:new/2| BIF can also take a list of options that specify: 
 
 \begin{itemize}
@@ -49,17 +49,17 @@ The \verb|ets:new/2| BIF can also take a list of options that specify:
 \item
   Whether the table is a \verb|named_table|, in which case the atom provided as a table name can be used instead of the TID in table operations.
 \item 
-  Whether the table type is \verb|set|, \verb|bag |, \verb|duplicate_bag| or \verb|ordered_set|. 
+  Whether the table type is \verb|set|, \verb|bag|, \verb|duplicate_bag| or \verb|ordered_set|. 
   See section~\ref{sec:table_types} for information about the data-structures used in the different table types.
 \item 
   Whether fine grained and/or faster locking is enabled for read and write operations (specified with the options \verb|write_concurrency| and \verb|read_concurrency|). 
   See section~\ref{sec:concurrency_options} and \ref{sec:benchmark} for more information about these options.
 \end{itemize}
 
-ETS tables are owned by the creating process as long as the creating process is alive, unless the ownership has been passed to another process with the \verb|ets:give_away| operation.
+ETS tables are ''owned'' by the creating process for as long as the creating process is alive, unless the ownership has been passed to another process with the \verb|ets:give_away| operation.
 If the owner of an ETS table terminates the table will be deleted, unless the \verb|heir| option is set.
 Developers can use the \verb|heir| option (only during creation) or the \verb|set_heir| BIF (at anytime) to specify a process that will inherit the table when the current owner terminates. 
-If a process has been specified with the \verb|heir| option, it will receive a message signalling the transfer of table ownership, when the previous owner terminates.
+If a process has been specified with the \verb|heir| option, it will receive a message signaling the transfer of table ownership, when the previous owner terminates.
 
 \subsection{Overview of Table Operations}
 
@@ -74,7 +74,7 @@ See section~\ref{sec:table_types} for information about the data-structures used
  Insert the given object (or objects, if the parameter is a list of objects) to the table.
  \item[insert\_new(Tab, ObjectOrObjects) $\rightarrow$ true]
  This operation will insert the given object or objects if no object with the same key as any of the object(s) exists. 
- If a key already exists the operation will return false.
+ If a key already exists the operation will return \verb|false| and otherwise \verb|true|.
  \item[delete(Tab, Key) $\rightarrow$ true] Deletes all objects with the given key from the table.
  \item[first(Tab) $\rightarrow$ Key $|$ \texttt{end\_of\_table} ] Returns the first key in the table. If the table is of the \verb|ordered_set| type, the first key in Erlang term order will be returned. If the table is of any other type, the first key according to the table's internal order will be returned. If the table is empty, \verb|end_of_table| will be returned.
  \item[last(Tab) $\rightarrow$ Key $|$ \texttt{end\_of\_table} ] Returns the last key in the table.
@@ -82,17 +82,21 @@ See section~\ref{sec:table_types} for information about the data-structures used
 
 \section{Previous Work}
 
-  Scott Lystig Fritchie has suggested a new implementation of the set table type based on Judy-arrays~\cite{ScottEtsJudy}.
-  In this work the performance of a Judy-array based implementation is experimentally compared to the AVL-tree and linear hast table implementations currently available.
-  For large table sizes the operations lookup, insert and update seem to be faster with the Judy-array based implementation.
+  Scott Lystig Fritchie has suggested a new ETS table implementation based on Judy-arrays~\cite{ScottEtsJudy}.
+  Judy-arrays is a data structure similar to tries but it make use of compression techniques to waste less space and make better use of the processor cache. 
+  In this work the performance of a Judy-array based implementation is experimentally compared to the AVL-tree (\verb|ordered_set|) and the linear hash table (\verb|set|, \verb|bag| and \verb|duplicate_bag|) implementations currently available.
+  For large table sizes the operations lookup, insert and update seem to be fastest with the Judy-array based implementation.
   However, term deletion and table traversal seem to be slower in the Judy-array based implementation.
-  The benchmarks in the paper do not test how the implementation performs when operations are performed concurrently.
+  Fritchie does not give any suggestions on how to make a concurrent variant of the Judy-array based implementation.
+  It would probably not be trivial to make a good concurrent variant of the Judy-array based implementation since the placement of many values can be changed by modifying operations.
   
   Patrik Nyblom has suggested the addition of software transactional memory (STM) support for Erlang ETS tables~\cite{PatrikErlangTrans}.
   In this work it is argued that STM support could be added to Erlang with only minor changes to the ETS implementation.
   The suggested implementation would not effect the performance of ETS when the transactional features are not used.
   At the same time it could increase parallelism for use cases where the only alternative without transactional memory support is to serialize all operations on the ETS table (or tables).
   Benchmark results for a prototype of ETS with transactional memory, show that transactional memory support for ETS could make some use cases more scalable with the number of cores.
+  The kind of use cases that could benefit from the transactional ETS tables are where several ETS operations need to be performed atomically.
+  For example, a program that models a bank system where several users concurrently can transfer money between two bank accounts could benefit from transactional ETS tables.
   
 
 \section{Handling of Tables}
@@ -105,7 +109,7 @@ How locking is done when tables are accessed concurrently is described in sectio
 \label{sec:tables_overview}
 
 The following data structures are maintained on a system-wide level and are used for ``generic book-keeping''.
-Low level operations like finding the main data structure for a specific table or handling ownership trasfers use only these data structures.
+Low level operations like finding the main data structure for a specific table or handling ownership trasfers use only these data structures.  
 
 \begin{description}
 \item[meta\_main\_table]
