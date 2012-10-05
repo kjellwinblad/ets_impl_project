@@ -1,7 +1,6 @@
-%\documentclass[aps,pre,preprint,groupedaddress,nofootinbib]{revtex4}
 \documentclass[aps,pre,preprint,nofootinbib]{revtex4}
-%\documentclass[aps,twocolumn,pre,nofootinbib]{revtex4}   % list options between brackets
-\usepackage{listings}              % list packages between braces
+
+\usepackage{listings} 
 \usepackage{graphicx}
 \usepackage{epstopdf}
 %\usepackage{cite}
@@ -17,15 +16,15 @@
 
 \begin{abstract}
 
-  This report describes in detail the implementation of Erlang Term Storage (ETS) tables as of version R15B02 of the Erlang/OTP distribution.
-  The main goal of this documentation attempt is to understand the scalability limitations that the current implementation imposes on applications that heavily use ETS tables.
-  With ETS tables being oftenly used to share data between processes in Erlang programs, it is important to have a scalable ETS implementation as data sharing is a common bottleneck in parallel applications.
+This report describes in detail the implementation of Erlang Term Storage (ETS) tables as of version R15B02 of the Erlang/OTP distribution.
+The main goal of this documentation attempt is to understand the scalability limitations that the current implementation imposes on applications that heavily use ETS tables.
+With ETS tables often used to share data between processes in Erlang programs, it is important to have a scalable ETS implementation as data sharing is a common bottleneck in parallel applications.
 
-  In particular this report aims to become:
-  \begin{itemize}
-   \item a developer's guide to the current implementation of ETS tables
-   \item a common base of knowledge for further discussion about possible improvements to the scalability of ETS within the context of the RELEASE project
-  \end{itemize}
+In particular this report aims to become:
+\begin{itemize}
+\item a developer's guide to the current implementation of ETS tables;
+\item a common base of knowledge for further discussion about possible improvements to the scalability of ETS within the context of the RELEASE project.
+\end{itemize}
 
 \end{abstract}
 
@@ -33,7 +32,7 @@
 
 \section{Introduction}
 
-Erlang Term Storage (ETS) is a feature included in the Erlang runtime system.
+Erlang Term Storage (ETS) is a feature included in the Erlang/OTP runtime system.
 It supports storage of Erlang tuples (which we will be also calling \emph{objects} within the context of this report) outside the processes' heaps, in dedicated data structures called \emph{ETS tables}.
 This feature is used for two main reasons:
 \begin{enumerate}
@@ -55,15 +54,15 @@ The \verb|ets:new/2| BIF can also take a list of options that specify:
 \item
   Whether the table is a \verb|named_table|, in which case the atom provided as a table name can be used instead of the TID in table operations.
 \item
-  Whether the table type is \verb|set|, \verb|bag|, \verb|duplicate_bag| or \verb|ordered_set|.
+  Whether the table type is \verb|set|, \verb|bag|, \verb|duplicate_bag|, or \verb|ordered_set|.
   Different table types allow different multiplicities of keys and values in a table and might also offer additional guarantees in the order of traversal of the objects in a table.
-  See Section~\ref{sec:table_types} for information about the data-structures used in the different table types.
+  See Section~\ref{sec:table_types} for information about the data structures used in the different table types.
 \item
   Whether fine grained and/or asymmetrically-optimized locking is enabled for read and write operations (specified with the options \verb|write_concurrency| and \verb|read_concurrency|).
-  The effect of these options is described in detail in Section~\ref{sec:concurrency_options} and \ref{sec:benchmark}.
+  The effect of these options is described in detail in Sections~\ref{sec:concurrency_options} and~\ref{sec:benchmark}.
 \end{itemize}
 
-ETS tables are ''owned'' by the creating process for as long as the creating process is alive, unless the ownership has been passed to another process with the \verb|ets:give_away| operation.
+ETS tables are ``owned'' by the creating process for as long as the creating process is alive, unless the ownership has been passed to another process with the \verb|ets:give_away| operation.
 If the owner of an ETS table terminates the table will be deleted, unless the \verb|heir| option is set.
 Developers can use the \verb|heir| option (only during creation) or the \verb|ets:set_heir| BIF (at anytime) to specify a process that will inherit the table when the current owner terminates.
 A process designated as \verb|heir| will receive a message signaling the transfer of table ownership, when the owner of the table terminates.
@@ -74,45 +73,45 @@ This section gives an overview of the most fundamental ETS table operations.
 The Erlang documentation for ETS tables has a complete description of all table operations.
 
 \begin{description}
- \item[lookup(Tab, Key) $\rightarrow$ [Object]]
- Returns a list of objects that have the given key.
- \item[insert(Tab, ObjectOrObjects) $\rightarrow$ true]
- Insert the given object (or objects, if the parameter is a list of objects) to the table.
- \item[insert\_new(Tab, ObjectOrObjects) $\rightarrow$ true]
- This operation will insert the given object or objects if no object with the same key as any of the object(s) exists.
- If a key already exists the operation will return \verb|false| and otherwise \verb|true|.
- \item[delete(Tab, Key) $\rightarrow$ true]
-   Deletes all objects with the given key from the table.
- \item[first(Tab) $\rightarrow$ Key $|$ \texttt{end\_of\_table} ]
-   Returns the first key in the table.
-   If the table is of the \verb|ordered_set| type, the first key in Erlang term order will be returned.
-   If the table is of any other type, the first key according to the table's internal order will be returned.
-   If the table is empty, \verb|end_of_table| will be returned.
-\item[next(Tab, Key) $\rightarrow$ NextKey $|$ \texttt{end\_of\_table} ]
+\item[lookup(Tab, Key) $\rightarrow$ [Object]]
+  Returns a list of objects that have the given key.
+\item[insert(Tab, ObjectOrObjects) $\rightarrow$ true]
+  Insert the given object (or objects, if the parameter is a list of objects) to the table.
+\item[insert\_new(Tab, ObjectOrObjects) $\rightarrow$ boolean()]
+  This operation will insert the given object or objects if no object with the same key as any of the object(s) exists.
+  If a key already exists the operation will return \verb|false| and otherwise \verb|true|.
+\item[delete(Tab, Key) $\rightarrow$ true]
+  Deletes all objects with the given key from the table.
+\item[first(Tab) $\rightarrow$ Key $|$ \texttt{end\_of\_table}]
+  Returns the first key in the table.
+  If the table is of the \verb|ordered_set| type, the first key in Erlang term order will be returned.
+  If the table is of any other type, the first key according to the table's internal order will be returned.
+  If the table is empty, \verb|end_of_table| will be returned.
+\item[next(Tab, Key) $\rightarrow$ NextKey $|$ \texttt{end\_of\_table}]
   Given a key, this operation returns the next key appearing in the table.
   If the table is of the \verb|ordered_set| type, the next key in Erlang term order is returned.
   If the table is of any other type, the next key according to the table's internal order is returned.
   If there is no next key, \texttt{end\_of\_table} is returned.
- \item[last(Tab) $\rightarrow$ Key $|$ \texttt{end\_of\_table} ] Returns the last key in the table.
+\item[last(Tab) $\rightarrow$ Key $|$ \texttt{end\_of\_table}] Returns the last key in the table.
 \end{description}
 
 \section{Previous Work}
 
-  Scott Lystig Fritchie has suggested a new ETS table implementation based on Judy-arrays~\cite{ScottEtsJudy}.
-  Judy-arrays is a data structure similar to tries but it make use of compression techniques to waste less space and make better use of the processor cache.
-  The performance of a Judy-array based implementation is experimentally compared to the AVL-tree (\verb|ordered_set|) and the linear hash table (\verb|set|, \verb|bag| and \verb|duplicate_bag|) implementations currently available.
-  For large table sizes the operations lookup, insert and update seem to be fastest with the Judy-array based implementation.
-  However, term deletion and table traversal seem to be slower in the Judy-array based implementation.
-  Fritchie does not give any suggestions on how to make a concurrent variant of the Judy-array based implementation.
-  It would probably not be trivial to make a good concurrent variant of the Judy-array based implementation since operations can modify the location of multiple values.
+Scott Lystig Fritchie has suggested a new ETS table implementation based on Judy-arrays~\cite{ScottEtsJudy}.
+Judy-arrays is a data structure similar to tries but it make use of compression techniques to waste less space and make better use of the processor cache.
+The performance of a Judy-array based implementation is experimentally compared to the AVL-tree (\verb|ordered_set|) and the linear hash table (\verb|set|, \verb|bag| and \verb|duplicate_bag|) implementations currently available.
+For large table sizes the operations lookup, insert and update seem to be fastest with the Judy-array based implementation.
+However, term deletion and table traversal seem to be slower in the Judy-array based implementation.
+Fritchie does not give any suggestions on how to make a concurrent variant of the Judy-array based implementation.
+It would probably not be trivial to make a good concurrent variant of the Judy-array based implementation since operations can modify the location of multiple values.
 
-  Patrik Nyblom has suggested the addition of software transactional memory (STM) support for Erlang ETS tables~\cite{PatrikErlangTrans}.
-  In this work it is argued that STM support could be added to Erlang with only minor changes to the ETS implementation.
-  The suggested implementation would not effect the performance of ETS when the transactional features are not used.
-  At the same time it could increase parallelism for use cases where the only alternative without transactional memory support is to serialize all operations on the ETS table (or tables).
-  Benchmark results for a prototype of ETS with transactional memory, show that transactional memory support for ETS could make some use cases more scalable with the number of cores.
-  The kind of use cases that could benefit from the transactional ETS tables are where several ETS operations need to be performed atomically.
-  For example, a program that models a bank system where several users transfer money between two bank accounts could benefit from transactional ETS tables.
+Patrik Nyblom has suggested the addition of software transactional memory (STM) support for Erlang ETS tables~\cite{PatrikErlangTrans}.
+In this work it is argued that STM support could be added to Erlang with only minor changes to the ETS implementation.
+The suggested implementation would not effect the performance of ETS when the transactional features are not used.
+At the same time it could increase parallelism for use cases where the only alternative without transactional memory support is to serialize all operations on the ETS table (or tables).
+Benchmark results for a prototype of ETS with transactional memory, show that transactional memory support for ETS could make some use cases more scalable with the number of cores.
+The kind of use cases that could benefit from the transactional ETS tables are where several ETS operations need to be performed atomically.
+For example, a program that models a bank system where several users transfer money between two bank accounts could benefit from transactional ETS tables.
 
 \section{Handling of Tables}
 
@@ -179,9 +178,9 @@ The size of this lock array is currently defined at \emph{compile time} to 16.
 The current implementation\footnote{All the particular sizes mentioned reflect faithfully the implementation as of R15B02.} of ETS tables is based on linear dynamic hash tables~\cite{Larson}.
 The main data structure is called ``extended segment'' and has two parts:
 \begin{enumerate}
-  \item A ``bucket'' section, containing 256 pointers to buckets which are lists of objects.
-    These lists correspond to the common ``chaining'' implementation of a hash table.
-  \item A ``segment'' section, pointing to ``bucket'' sections.
+\item A ``bucket'' section, containing 256 pointers to buckets which are lists of objects.
+  These lists correspond to the common ``chaining'' implementation of a hash table.
+\item A ``segment'' section, pointing to ``bucket'' sections.
 \end{enumerate}
 The runtime system can also allocate plain ``bucket'' sections, without ``segment'' sections attached.
 As an invariant, the entry point for all access to a hash table's data is a ``current'' extended segment, but there might also exist older extended segments that are still used for their bucket sections and may also be used again for their segment sections if the table is shrinked.
@@ -206,10 +205,10 @@ Within each such chain there is no ordering of the objects and new objects are a
 This happens because regardless of the specific type of hash table, entries with the same key need to be detected and grouped together.
 
 \begin{figure}[htb]
-\centering
-\includegraphics[width=1.0\textwidth]{hash_table_structure.eps}
-\caption{Hash table structure}
-\label{fig:hash_table_structure}
+  \centering
+  \includegraphics[width=1.0\textwidth]{hash_table_structure.eps}
+  \caption{Hash table structure}
+  \label{fig:hash_table_structure}
 \end{figure}
 
 \subsubsection{Growing}
@@ -220,9 +219,9 @@ Growing happens by splitting just one bucket, moving objects to the bucket after
 The bucket to be split is the one obtained by dropping the newly active bucket's index most significant bit.
 If the segment address of the new bucket corresponds to an index in the segment section that is currently not pointing to a bucket section, a new plain bucket section is allocated and the slot is now pointing to its first entry.
 If this operation would assign a plain bucket section in the last slot of the segment section of the currently active extended segment, a new extended segment is allocated instead, with more slots in its segment section\footnote{
-The first extended segment has 2 slots in its segment section.
-The second extended segment has 256 slots in its segment section.
-Each next extended segment has 128 more slots in its segment section than the previous.
+  The first extended segment has 2 slots in its segment section.
+  The second extended segment has 256 slots in its segment section.
+  Each next extended segment has 128 more slots in its segment section than the previous.
 }.
 After a new extended segment is allocated, all the pointers from the segment section of the old extended segment are copied into the low indices of the segment section of new extended segment.
 This leads to duplication (the same plain bucket sections are accessible from multiple extended segment sections), but enables reaching the contents of a bucket by using the segment section of just the current extended segment.
@@ -281,12 +280,12 @@ When a table is fixed, a sequence of \verb|first/1| and \verb|next/2| calls are 
 This high-level guarantee can be simplified into the following 2 low-level ones:
 
 \begin{enumerate}
-  \item Keys will not totally disappear from the table.
-    A key can thus be used as an iterator to find the next key in iteration sequence.
-    Note however that this does not mean that (pointers to) table objects are guaranteed to be maintained while the table is fixated.
-    A \verb|bag| or \verb|duplicate_bag| may actually remove objects as long as there is at least one object left in the table with the same key.
-    \item Objects will not be moved between buckets due to table grow/shrink.
-      This will guarantee that iterations do not miss keys or get double-hits.
+\item Keys will not totally disappear from the table.
+  A key can thus be used as an iterator to find the next key in iteration sequence.
+  Note however that this does not mean that (pointers to) table objects are guaranteed to be maintained while the table is fixated.
+  A \verb|bag| or \verb|duplicate_bag| may actually remove objects as long as there is at least one object left in the table with the same key.
+\item Objects will not be moved between buckets due to table grow/shrink.
+  This will guarantee that iterations do not miss keys or get double-hits.
 \end{enumerate}
 
 \subsection{Implementation}
@@ -300,46 +299,46 @@ The mapping of PIDs and TIDs is used to remove fixations when processes exit.
 
 \section{Benchmark} \label{sec:benchmark}
 
-  A simple benchmark has been performed.
-  The purpose of the benchmark is to see how the \verb|write_concurrency| and \verb|read_concurrency| options affect the performance of different table types on a ''real world'' problem.
-  The benchmark creates workers that all do \verb|lookup|s and \verb|insert|s on the same ETS table.
-  It was run on a computer with 64 cores (AMD Bulldozer Architecture).
-  It was run with all combinations of \verb|write_concurrency| and \verb|read_concurrency| together with the table types \verb|set| and \verb|ordered_set|.
+A simple benchmark has been performed.
+The purpose of the benchmark is to see how the \verb|write_concurrency| and \verb|read_concurrency| options affect the performance of different table types on a ''real world'' problem.
+The benchmark creates workers that all do \verb|lookup|s and \verb|insert|s on the same ETS table.
+It was run on a computer with 64 cores (AMD Bulldozer Architecture).
+It was run with all combinations of \verb|write_concurrency| and \verb|read_concurrency| together with the table types \verb|set| and \verb|ordered_set|.
 
-  \subsection{Benchmark Problem}
-    The benchmark program finds the minimum number of sort steps to sort an array, containing \emph{black} marks, \emph{white} marks and \emph{empty} positions.
-    As an example the sequence \verb|"ebbwe"| represents such an array, with \verb|e| marking \emph{empty} position, \verb|w| representing \emph{white} mark and \verb|b| representing \emph{black} mark.
-    Black marks can only move towards the right end of the array and white marks can only move towards the left end.
-    In one sort step a mark can:
-    \begin{itemize}
-     \item move one step in the array if the adjacent position in the direction of the movement is \emph{empty} or
-     \item move two steps in the array, if the adjacent position in the direction of the movement contains \emph{a mark} and the position after the adjacent position is \emph{empty}.
-    \end{itemize}
-    A sorted array has all white marks in the leftmost positions and all black marks in the rightmost positions.
-    Some input arrays are impossible to sort with the given constraints, e.g. \verb|"bbww"|.
-    If the input array can not be sorted the program shall return $-1$.
-    For example the minimum number of steps for \verb|"ebbwe"| is $5$.
-    The benchmark measures time needed to return the result for the arrays \verb|"bebebbeeeewwwbw"| and \verb|"bebebeeewewewewwe"|.
+\subsection{Benchmark Problem}
+The benchmark program finds the minimum number of sort steps to sort an array, containing \emph{black} marks, \emph{white} marks and \emph{empty} positions.
+As an example the sequence \verb|"ebbwe"| represents such an array, with \verb|e| marking \emph{empty} position, \verb|w| representing \emph{white} mark and \verb|b| representing \emph{black} mark.
+Black marks can only move towards the right end of the array and white marks can only move towards the left end.
+In one sort step a mark can:
+\begin{itemize}
+\item move one step in the array if the adjacent position in the direction of the movement is \emph{empty} or
+\item move two steps in the array, if the adjacent position in the direction of the movement contains \emph{a mark} and the position after the adjacent position is \emph{empty}.
+\end{itemize}
+A sorted array has all white marks in the leftmost positions and all black marks in the rightmost positions.
+Some input arrays are impossible to sort with the given constraints, e.g. \verb|"bbww"|.
+If the input array can not be sorted the program shall return $-1$.
+For example the minimum number of steps for \verb|"ebbwe"| is $5$.
+The benchmark measures time needed to return the result for the arrays \verb|"bebebbeeeewwwbw"| and \verb|"bebebeeewewewewwe"|.
 
-  \subsection{Implementation}
-    The Erlang program that solves the benchmark problem is available on www.github.com\footnote{http://github.com/kjellwinblad/ets\_impl\_project/blob/master/benchmark/multi\_4.erl}.
-    The program explores the possible solutions using breadth first search.
-    Explored configurations are saved in an ETS table to avoid repeating work.
+\subsection{Implementation}
+The Erlang program that solves the benchmark problem is available on www.github.com\footnote{http://github.com/kjellwinblad/ets\_impl\_project/blob/master/benchmark/multi\_4.erl}.
+The program explores the possible solutions using breadth first search.
+Explored configurations are saved in an ETS table to avoid repeating work.
 
-    The program has one coordinator process and a number of worker processes.
-    At a specific level in the search tree, the coordinator divides the configurations that needs to be explored in the next level evenly and sends them to the workers.
-    The workers send a message to the coordinator if a solution is found.
-    If a worker gets a configuration that is not a solution, it is expanded by generating all possible configurations that can be created by performing one sort step.
+The program has one coordinator process and a number of worker processes.
+At a specific level in the search tree, the coordinator divides the configurations that needs to be explored in the next level evenly and sends them to the workers.
+The workers send a message to the coordinator if a solution is found.
+If a worker gets a configuration that is not a solution, it is expanded by generating all possible configurations that can be created by performing one sort step.
 
-    Directly after a configuration is generated, it is checked whether it already exists in the ETS table cache with the \verb|ets:member| function.
-    If it already exists, it is thrown away because the configuration has already been visited.
-    Otherwise, the configuration is inserted in the ETS table with the \verb|ets:insert_new| operation.
-    The return value of \verb|ets:insert_new| is checked to make sure that the configuration has not been inserted by another process between the call to \verb|ets:member| and \verb|ets:insert_new|.
-    The Erlang code that is interacting with the ETS table cache in the workers can be seen in listing~\ref{li_erlang_ets_interaction}.
+Directly after a configuration is generated, it is checked whether it already exists in the ETS table cache with the \verb|ets:member| function.
+If it already exists, it is thrown away because the configuration has already been visited.
+Otherwise, the configuration is inserted in the ETS table with the \verb|ets:insert_new| operation.
+The return value of \verb|ets:insert_new| is checked to make sure that the configuration has not been inserted by another process between the call to \verb|ets:member| and \verb|ets:insert_new|.
+The Erlang code that is interacting with the ETS table cache in the workers can be seen in listing~\ref{li_erlang_ets_interaction}.
 
-    \lstset{language=erlang, caption=Worker code that is interacting with ETS, label=li_erlang_ets_interaction}
+\lstset{language=erlang, caption=Worker code that is interacting with ETS, label=li_erlang_ets_interaction}
 \begin{lstlisting}[float=htb]
-IsFound = ets:member(Cache, MoveArray),
+  IsFound = ets:member(Cache, MoveArray),
 case IsFound of
   false ->
     Inserted = ets:insert_new(Cache, {MoveArray}),
@@ -354,18 +353,16 @@ case IsFound of
 end
 \end{lstlisting}
 
-    A worker sends back all the configurations that need to be explored in the next level to the coordinator, when it has processed all given configurations on the current level.
-
+A worker sends back all the configurations that need to be explored in the next level to the coordinator, when it has processed all given configurations on the current level.
 
 \subsection{Results}
 
-  The results of the benchmark can be seen in figure~\ref{fig:benchmark_results}.
-  The filled straight line labeled \emph{serial} is the performance of a serial version of the benchmark program.
-  The serial version can also be found on www.github.com\footnote{http://github.com/kjellwinblad/ets\_impl\_project/blob/master/benchmark/single\_1.erl}.
-  The graphs with \emph{set} in the label show the benchmark times for the table type \verb|set|.
-  The graphs with \emph{ordset} in the label show the benchmark times for the table type \verb|ordered_set|.
-  A \emph{w} in the label means that the table has \verb|write_concurrency| enabled and an \emph{r} in the label means that the table has \verb|read_concurrency| enabled.
-
+The results of the benchmark can be seen in figure~\ref{fig:benchmark_results}.
+The filled straight line labeled \emph{serial} is the performance of a serial version of the benchmark program.
+The serial version can also be found on www.github.com\footnote{http://github.com/kjellwinblad/ets\_impl\_project/blob/master/benchmark/single\_1.erl}.
+The graphs with \emph{set} in the label show the benchmark times for the table type \verb|set|.
+The graphs with \emph{ordset} in the label show the benchmark times for the table type \verb|ordered_set|.
+A \emph{w} in the label means that the table has \verb|write_concurrency| enabled and an \emph{r} in the label means that the table has \verb|read_concurrency| enabled.
 
 \begin{figure}[htb]
 \centering
@@ -374,58 +371,54 @@ end
 \label{fig:benchmark_results}
 \end{figure}
 
-  The table type \verb|set| with \verb|write_concurrency| enabled seems to give similar performance both with and without \verb|read_concurrency| enabled.
-  All other configurations have similar performance.
-  It is not surprising that all \verb|ordered_set| configurations perform similarly since the \verb|write_concurrency| and \verb|read_concurrency| options do not affect this table type at all.
-  The \verb|ordered_set| table type should theoretically have more expensive \verb|lookup| and \verb|insert| operations compared to the \verb|set| table type.
-  This does not seem to have any significant effect on this benchmark.
+The table type \verb|set| with \verb|write_concurrency| enabled seems to give similar performance both with and without \verb|read_concurrency| enabled.
+All other configurations have similar performance.
+It is not surprising that all \verb|ordered_set| configurations perform similarly since the \verb|write_concurrency| and \verb|read_concurrency| options do not affect this table type at all.
+The \verb|ordered_set| table type should theoretically have more expensive \verb|lookup| and \verb|insert| operations compared to the \verb|set| table type.
+This does not seem to have any significant effect on this benchmark.
 
-  In this particular benchmark it is evident that \verb|write_concurrency| for the table type \verb|set| is particularly important for scalability.
-  For the other configurations the performance seems to get worse, when more than five worker processes are used.
-  It is reasonable to assume that the reason behind that is that contention becomes higher when the number of workers is increased.
-
-
+In this particular benchmark it is evident that \verb|write_concurrency| for the table type \verb|set| is particularly important for scalability.
+For the other configurations the performance seems to get worse, when more than five worker processes are used.
+It is reasonable to assume that the reason behind that is that contention becomes higher when the number of workers is increased.
 
 \section{Scalable ETS Suggestions}
 
-  The benchmark described in section~\ref{sec:benchmark}, shows that fine grained locking (provided by the \verb|write_concurrency| option) can be very important for scalability.
-  The number of locks used when fine grained locking is enabled is hard-coded to 16 in the current implementation.
-  It is tempting to make the locking even more fine grained, since it could possibly make ETS more scalable.
-  However, it might increase processor cache misses and have other unforeseen effects so it is not certain that it will give better scalability.
-  The benchmark described in section~\ref{sec:benchmark} has also been run with a versions of the runtime environment with the number of locks set to 32 and 64.
-  This change did not seem to have any significant effect on the performance of the benchmark program.
-  There might be other bottleneck in this particular benchmark that are more important.
-  It would be interesting to look more deeply into how the number of locks affects the performance of other benchmarks.
+The benchmark described in section~\ref{sec:benchmark}, shows that fine grained locking (provided by the \verb|write_concurrency| option) can be very important for scalability.
+The number of locks used when fine grained locking is enabled is hard-coded to 16 in the current implementation.
+It is tempting to make the locking even more fine grained, since it could possibly make ETS more scalable.
+However, it might increase processor cache misses and have other unforeseen effects so it is not certain that it will give better scalability.
+The benchmark described in section~\ref{sec:benchmark} has also been run with a versions of the runtime environment with the number of locks set to 32 and 64.
+This change did not seem to have any significant effect on the performance of the benchmark program.
+There might be other bottleneck in this particular benchmark that are more important.
+It would be interesting to look more deeply into how the number of locks affects the performance of other benchmarks.
 
-  The benchmarks of Judy-array based ETS table implementations that are described by Fritchie, suggests that there are other table implementations that are significantly faster than the current ones for some use cases~\cite{ScottEtsJudy}.
-  Fritchie did not discuss how to make the Judy-array based ETS table implementation concurrent.
-  Prokopec, Bagwell and Odersky have described a ''lock-free'' concurrent data type called CTrie which is similar to the ETS table implementation suggested by Fritchie~\cite{ProkopecCTrie}.
-  Benchmarks indicate that CTries scales well compared to many other concurrent table implementations~\cite{ProkopecCTrie}.
-  Using a CTrie to implement ETS tables could potentially provide better scalability than the current implementation.
+The benchmarks of Judy-array based ETS table implementations that are described by Fritchie, suggests that there are other table implementations that are significantly faster than the current ones for some use cases~\cite{ScottEtsJudy}.
+Fritchie did not discuss how to make the Judy-array based ETS table implementation concurrent.
+Prokopec, Bagwell and Odersky have described a ''lock-free'' concurrent data type called CTrie which is similar to the ETS table implementation suggested by Fritchie~\cite{ProkopecCTrie}.
+Benchmarks indicate that CTries scale well compared to many other concurrent table implementations~\cite{ProkopecCTrie}.
+Using a CTrie to implement ETS tables could potentially provide better scalability than the current implementation.
 
-  The current ETS table implementation has no good support for use cases when more than one table operation need to be performed atomically.
-  The only practical way to support that use case with the current ETS implementation is to serialize all access to the ETS table or ETS tables involved.
-  Transactional support for ETS tables as suggested in~\cite{PatrikErlangTrans} could be a way to support this use case in a much more scalable way.
+The current ETS table implementation has no good support for use cases when more than one table operation need to be performed atomically.
+The only practical way to support that use case with the current ETS implementation is to serialize all access to the ETS table or ETS tables involved.
+Transactional support for ETS tables as suggested in~\cite{PatrikErlangTrans} could be a way to support this use case in a much more scalable way.
 
-  In the current implementation of ETS, all terms that are inserted or fetched from an ETS table are copied from or to the ETS table.
-  This might be expensive both in respect to time and memory if many processes access the same objects in the table.
-  An alternative would be to use references for terms that are stored in ETS tables.
-  The Erlang runtime already uses references for values of the binary data type.
-  Therefore, it might be possible to reuse some existing components in the Erlang runtime system, to implement references for terms stored in the ETS tables with some potential performance benefits.
+In the current implementation of ETS, all terms that are inserted or fetched from an ETS table are copied from or to the ETS table.
+This might be expensive both in respect to time and memory if many processes access the same objects in the table.
+An alternative would be to use references for terms that are stored in ETS tables.
+The Erlang runtime already uses references for values of the binary data type.
+Therefore, it might be possible to reuse some existing components in the Erlang runtime system, to implement references for terms stored in the ETS tables with some potential performance benefits.
 
-  The current \verb|ordered_set| table type uses only one lock for the whole data structure.
-  There exist implementations of binary trees that scale well and that have support for efficient traversal of the tree.
-  Bronson, Casper, Chafi and Olukotun have described a relaxed AVL-tree data-structure with STM inspired methods for thread safety~\cite{BronsonPracTree}.
-  This implementation could give much better scalability on a multi-core computer than the current \verb|ordered_set| implementation.
+The current \verb|ordered_set| table type uses only one lock for the whole data structure.
+There exist implementations of binary trees that scale well and that have support for efficient traversal of the tree.
+Bronson, Casper, Chafi and Olukotun have described a relaxed AVL-tree data-structure with STM inspired methods for thread safety~\cite{BronsonPracTree}.
+This implementation could give much better scalability on a multi-core computer than the current \verb|ordered_set| implementation.
 
-  Furthermore, there are many more concurrent implementation of lookup tables that could be used in ETS and potentially provide better scalability.
-  It could be interesting to do a more in depth study of the implementation that are in use today.
-  For example \verb|ConcurrentHashMap| in the Java library does not require any locks for lookup operations \cite{BrianConcHashMap}.
+Furthermore, there are many more concurrent implementation of lookup tables that could be used in ETS and potentially provide better scalability.
+It could be interesting to do a more in depth study of the implementation that are in use today.
+For example \verb|ConcurrentHashMap| in the Java library does not require any locks for lookup operations \cite{BrianConcHashMap}.
 
 
-\bibliographystyle{unsrt}
-
+\bibliographystyle{plain}
 \bibliography{report}
-
 
 \end{document}
