@@ -33,24 +33,36 @@ In particular this report aims to become:
 \section{Introduction}
 
 Erlang Term Storage (ETS) is a feature included in the Erlang/OTP runtime system.
-It supports storage of Erlang tuples (which we will be also calling \emph{objects} within the context of this report) outside the processes' heaps, in dedicated data structures called \emph{ETS tables}.
-This feature is used for two main reasons:
+It supports storage of Erlang tuples (also called \emph{objects} in this report) outside the processes' heaps.
+ETS makes use of dedicated data structures called \emph{ETS tables} to store data.
+This feature is included for the following main reasons:
 \begin{enumerate}
-\item The generational garbage collector for processes' heaps performs a copying pass during major collections.
-Persistent data are therefore copied many times during such passes. Storing this data on a dedicated data structure that is not garbage collected improves the efficiency of garbage collection.
-\item An Erlang ETS table behaves as if a dedicated process served requests for insertions, lookups and other operations on a key value dictionary, but is implemented in a more efficient way.
-It is therefore ideal for sharing of data between processes.
+\item 
+An Erlang ETS table behaves as if a dedicated process served requests for insertions, lookups and other operations on a key value dictionary.
+However, it is implemented in a more efficient way than what could have been done with a standard Erlang process.
+Since ETS is mostly implemented in the lower level programming language C, it is probably faster than what could be accomplished with a pure Erlang implementation.
+ETS can therefore be an efficient way of sharing data between processes.
+\item 
+ETS has support for fetching data from a table based on a criteria.
+This is used by, for example, the Erlang database Mnesia which implementation is based on ETS tables.
+\item 
+The process garbage collector copy the process' data during collections.
+Long-lived data are therefore copied many times during such passes. 
+Storing this data in a dedicated data structure that is not garbage collected can also improve the efficiency of programs.
 \end{enumerate}
 Most of the operations on an ETS table are implemented as built-in functions (BIFs) in the Erlang runtime system.
+
+\section{Creating an ETS Table}
+
 An ETS table can be accessed by either a \emph{table identifier} (TID) or an atom (in case of a \emph{named} table).
-In either case the identifier for the table the resulting value of a call to the \verb|ets:new/2| BIF.
+Table identifiers are created by calling the \verb|ets:new/2| BIF.
 The \verb|ets:new/2| BIF can also take a list of options that specify:
 
 \begin{itemize}
 \item
   The access level for the table which can be \verb|private|, \verb|protected| or \verb|public|.
-  Only the creating process can read and write on \verb|private| tables, other processes may read \verb|protected| tables and other processes can both read and write on \verb|public| tables.
-  More information about these options can be found at the Erlang documentation\footnote{http://www.erlang.org/doc/man/ets.html}.
+  Only the creating process can read and write on \verb|private| tables, other processes may read but not write \verb|protected| tables and other processes can both read and write \verb|public| tables.
+  More information about these options can be found at the Erlang documentation for ETS\footnote{http://www.erlang.org/doc/man/ets.html}.
 \item
   Whether the table is a \verb|named_table|, in which case the atom provided as a table name can be used instead of the TID in table operations.
 \item
@@ -65,15 +77,15 @@ The \verb|ets:new/2| BIF can also take a list of options that specify:
 ETS tables are ``owned'' by the creating process for as long as the creating process is alive, unless the ownership has been passed to another process with the \verb|ets:give_away| operation.
 If the owner of an ETS table terminates the table will be deleted, unless the \verb|heir| option is set.
 Developers can use the \verb|heir| option (only during creation) or the \verb|ets:set_heir| BIF (at anytime) to specify a process that will inherit the table when the current owner terminates.
-A process designated as \verb|heir| will receive a message signaling the transfer of table ownership, when the owner of the table terminates.
+A process that is set as \verb|heir| will receive a message signaling the transfer of table ownership.
 
 \subsection{Overview of Table Operations}
 
 This section gives an overview of the most fundamental ETS table operations.
-The Erlang documentation for ETS tables has a complete description of all table operations.
+The Erlang documentation for ETS has a complete description of all table operations.
 
 \begin{description}
-\item[lookup(Tab, Key) $\rightarrow$ [Object]]
+\item[lookup(Tab, Key) $\rightarrow$ [Object\]]
   Returns a list of objects that have the given key.
 \item[insert(Tab, ObjectOrObjects) $\rightarrow$ true]
   Insert the given object (or objects, if the parameter is a list of objects) to the table.
@@ -116,7 +128,7 @@ For example, a program that models a bank system where several users transfer mo
 \section{Handling of Tables}
 
 The infrastructure for the handling of tables is described in this section.
-An overview of the data-structures used on a global level is provided in section~\ref{sec:tables_overview}.
+An overview of the data structures used on a global level is provided in section~\ref{sec:tables_overview}.
 How locking is done when tables are accessed concurrently is described in section~\ref{sec:tables_locking}.
 
 \subsection{Global data structures}
