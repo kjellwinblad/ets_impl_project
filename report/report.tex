@@ -35,22 +35,25 @@ In particular this report aims to become:
 Erlang Term Storage (ETS) is a feature included in the Erlang/OTP runtime system.
 It supports storage of Erlang tuples (also called \emph{objects} in this report) outside the processes' heaps.
 ETS makes use of dedicated data structures called \emph{ETS tables} to store data.
-This feature is included for the following main reasons:
+Most of the operations supported by ETS are implemented as built-in functions (BIFs) in the Erlang runtime system.
+ETS is included for the following main reasons:
 \begin{enumerate}
 \item 
 An Erlang ETS table behaves as if a dedicated process served requests for insertions, lookups and other operations on a key value dictionary.
 However, it is implemented in a more efficient way than what could have been done with a standard Erlang process.
-Since ETS is mostly implemented in the lower level programming language C, it is probably faster than what could be accomplished with a pure Erlang implementation.
+This is because ETS is mostly implemented in the lower level programming language C.
 ETS can therefore be an efficient way of sharing data between processes.
 \item 
 ETS has support for fetching data from a table based on a criteria.
 This is used by, for example, the Erlang database Mnesia which implementation is based on ETS tables.
+Without ETS it would be difficult to make an efficent implementation of Mnesia in Erlang.
+Mnesia has support for syncronising tables that are located in different Erlang nodes and for persistant storage of tables etc.
 \item 
 The process garbage collector copy the process' data during collections.
 Long-lived data are therefore copied many times during such passes. 
 Storing this data in a dedicated data structure that is not garbage collected can also improve the efficiency of programs.
 \end{enumerate}
-Most of the operations on an ETS table are implemented as built-in functions (BIFs) in the Erlang runtime system.
+
 
 \section{Creating an ETS Table}
 
