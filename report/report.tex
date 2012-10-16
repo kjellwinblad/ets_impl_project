@@ -30,27 +30,75 @@ In particular this report aims to become:
 
 \maketitle
 
-\section{Introduction}
+\section{Introduction to Erlang}\label{sec:erlang_intro}
+
+Erlang is a garbage collected programming language especially designed to handle parallelism and fault tolerance well.
+An Erlang program consists of a number of processes.
+At a particular point in time an Erlang process consists of:
+\begin{itemize}
+ \item an mailbox for incoming messages from other processes (implemented as queue),
+ \item the current execution stack,
+ \item the process heap (containing data allocated by the process),
+ \item and a process dictionary (a key-value map which can only be directly accessed from the owning process).
+\end{itemize}
+From the Erlang programmer's point of view, processes do not share any mutable data.
+Processes communicate with each other by sending messages that will appear in the receiving process' mailbox.
+The data in a message sent from one process to another, is in most cases copied from the memory of the sending process to the memory of the receiving process.
+The exception in the current Erlang/OTP distribution is values of the Erlang binary data type.
+Values of the binary data type are stored in a special data area and only the reference to the binary is copied when messages containing binaries are sent\footnote{Only the reference of the binary is copied when it is sent to another process in the same Erlang node, but the whole binary is copied if it is sent to a process in another Erlang node.}.
+The allocation and deallocation of binaries is managed by reference counting.
+The reasoning behind the special case for binaries is that binaries are usually so large that it would be very expensive to do a full copy when sending them.
+
+The copying can be expensive since the time and space required to do a copy depends on the size of the message.
+However, the processes can be garbage collected independently when data is not shared by processes.
+The independent garbage collection can be important for the performance of parallel applications, since all other processes can continue unaffected while some are being garbage collected.
+It is worth noting that the copying of messages is the implementation chosen for the current Erlang/OTP distribution but it may be changed in the future.
+An alternative Erlang implementation that run on the Java Virtual Machine, called Erjang, just passes the message's reference.
+Thus, the Erjang implementation sends messages faster but can not garbage collect the processes independently.
+
+\section{Introduction to Erlang Term Storage}
 
 Erlang Term Storage (ETS) is a feature included in the Erlang/OTP runtime system.
 It supports storage of Erlang tuples (also called \emph{objects} in this report) outside the processes' heaps.
-ETS makes use of dedicated data structures called \emph{ETS tables} to store data.
-This feature is included for the following main reasons:
-\begin{enumerate}
-\item 
+ETS makes use of a dedicated data structures called \emph{ETS tables} to store data.
+The \emph{ETS tables} are mutable key-value maps.
+ETS provides different table types with different properties, but they all share a common interface.
+
+It is a well known fact that data that needs to be accessed and modified by several processes is a common bottleneck in parallel programs.
+Therefore, it is important for Erlang programmers to have an efficient way of communicating data between processes.
+In some programs the best way to communicate data between processes is to use Erlang's message system.
+In other programs ETS can be used as a convenient and efficient way to accomplish data sharing. 
+The program presented in Section~\ref{sec:benchmark} is an example of a program where ETS is useful.
 An Erlang ETS table behaves as if a dedicated process served requests for insertions, lookups and other operations on a key value dictionary.
-However, it is implemented in a more efficient way than what could have been done with a standard Erlang process.
-Since ETS is mostly implemented in the lower level programming language C, it is probably faster than what could be accomplished with a pure Erlang implementation.
-ETS can therefore be an efficient way of sharing data between processes.
-\item 
-ETS has support for fetching data from a table based on a criteria.
-This is used by, for example, the Erlang database Mnesia which implementation is based on ETS tables.
+However, since ETS is mostly implemented in the lower level programming language C, it is faster than what could be accomplished with a pure Erlang implementation.
+
+The following are the major reasons why ETS can be more efficiently implemented in C than in Erlang\footnote{The major reason why C was chosen for implementing ETS and not any other lower level programming language is that Erlang/OTP runtime system is implemented in C.}:
+\begin{itemize}
+\item
+Erlang does not have efficient support for working with mutable data.
+The only way to handle mutable data inside an Erlang process is to use the Erlang process dictionary.
+However this is not very practical since the process dictionary was not designed to be used to implement advanced data structures.
 \item 
 The process garbage collector copy the process' data during collections.
 Long-lived data are therefore copied many times during such passes. 
-Storing this data in a dedicated data structure that is not garbage collected can also improve the efficiency of programs.
-\end{enumerate}
-Most of the operations on an ETS table are implemented as built-in functions (BIFs) in the Erlang runtime system.
+Storing this data in an ETS table which is not garbage collected can improve the efficiency of programs.
+\end{itemize}
+
+Erlang tuples that are inserted to an ETS table are copied from the memory of the process that is inserting the data to the table.
+Erlang tuples that are retrieved from an ETS table are copied from the memory of the table to the retrieving process.
+Binaries is an exception as they are when messages are sent between processes.
+The reason why the whole tuple is copied and not just a reference to the tuple, is the same as the reason why messages are copied described in Section~\ref{sec:erlang_intro}.
+
+ETS tables have as well as the most common table operations insert, lookup and delete, support for traversing the tuples with operations first and next.
+It also has operations that finds all tuples matching a specific criteria.
+
+The Erlang database Mnesia gives the programmer an additional abstraction layer on top of ETS. 
+Mnesia has support for:
+\begin{itemize}
+ \item persistent tables,
+ \item synchronization of tables between Erlang nodes and
+ \item transactions.
+\end{itemize}
 
 \section{Creating an ETS Table}
 
@@ -79,13 +127,13 @@ If the owner of an ETS table terminates the table will be deleted, unless the \v
 Developers can use the \verb|heir| option (only during creation) or the \verb|ets:set_heir| BIF (at anytime) to specify a process that will inherit the table when the current owner terminates.
 A process that is set as \verb|heir| will receive a message signaling the transfer of table ownership.
 
-\subsection{Overview of Table Operations}
+\section{Overview of Table Operations}
 
 This section gives an overview of the most fundamental ETS table operations.
 The Erlang documentation for ETS has a complete description of all table operations.
 
 \begin{description}
-\item[lookup(Tab, Key) $\rightarrow$ [Object\]]
+\item[lookup(Tab, Key) $\rightarrow$ [Object]]
   Returns a list of objects that have the given key.
 \item[insert(Tab, ObjectOrObjects) $\rightarrow$ true]
   Insert the given object (or objects, if the parameter is a list of objects) to the table.
