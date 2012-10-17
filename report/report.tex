@@ -115,28 +115,41 @@ The \verb|ets:new/2| BIF can also take a list of options that specify:
   Whether the table is a \verb|named_table|, in which case the atom provided as a table name can be used instead of the TID in table operations.
 \item
   Whether the table type is \verb|set|, \verb|bag|, \verb|duplicate_bag|, or \verb|ordered_set|.
-  Different table types allow different multiplicities of keys and values in a table and might also offer additional guarantees in the order of traversal of the objects in a table.
+  The table types \verb|set|, \verb|bag| and \verb|duplicate_bag| are implemented as a linear hash table.
+  In tables of the \verb|set| data type all inserted tuples need to have an unique queue.
+  Whereas, in tables of the \verb|bag| data type there can be several tuples with the same key but all inserted tuples need to be unique.
+  Finally, the \verb|duplicate_bag| allow several copies of the same tuple.
+  The \verb|ordered_set| table type is implemented as AVL tree.
+  When traversing the tuples in an \verb|ordered_set|, the tuples are guaranteed to come with the smallest keys first (All Erlang terms have a defined order.).
   See Section~\ref{sec:table_types} for information about the data structures used in the different table types.
 \item
-  Whether fine grained and/or asymmetrically-optimized locking is enabled for read and write operations (specified with the options \verb|write_concurrency| and \verb|read_concurrency|).
-  The effect of these options is described in detail in Sections~\ref{sec:concurrency_options} and~\ref{sec:benchmark}.
+  Whether fine grained locking (\verb|write_concurrency|) and/or lock(s) optimized for frequent reads (\verb|read_concurrency|) should be used.
+  The fine grained locking only affect the tables that are implement with the linear hash table.
+  So specifying the \verb|write_concurrency| option together with the \verb|ordered_set| options does not have any effect.
+  The effect of these options is described in more detail in Sections~\ref{sec:concurrency_options} and~\ref{sec:benchmark}.
 \end{itemize}
 
-ETS tables are ``owned'' by the creating process for as long as the creating process is alive, unless the ownership has been passed to another process with the \verb|ets:give_away| operation.
+ETS tables are ``owned'' by the creating process for as long as the creating process is alive, unless the ownership has been passed to another process with the \verb|ets:give_away/3| operation.
 If the owner of an ETS table terminates the table will be deleted, unless the \verb|heir| option is set.
-Developers can use the \verb|heir| option (only during creation) or the \verb|ets:set_heir| BIF (at anytime) to specify a process that will inherit the table when the current owner terminates.
+Developers can use the \verb|heir| option to specify a process that will inherit the table when the current owner terminates.
 A process that is set as \verb|heir| will receive a message signaling the transfer of table ownership.
 
 \section{Overview of Table Operations}
 
 This section gives an overview of the most fundamental ETS table operations.
 The Erlang documentation for ETS has a complete description of all table operations.
+All operations are performed atomically, meaning that an operation would have the same effect if the process performing the operation was the only process.
+However, there is no built-in support for performing a sequence of operations atomically.
+Users that want to perform a sequence of operations atomically can use Mnesia or implement there own mechanism for ensuring atomicity.
 
 \begin{description}
-\item[lookup(Tab, Key) $\rightarrow$ [Object]]
+\item[lookup(Tab, Key) $\rightarrow$ {[Object]}]
   Returns a list of objects that have the given key.
 \item[insert(Tab, ObjectOrObjects) $\rightarrow$ true]
   Insert the given object (or objects, if the parameter is a list of objects) to the table.
+  It is common to use a programming pattern where first a lookup is made to check if a value with a certain key exists and then an insert is made to insert a new value if there was none before.
+  This pattern can be problematic in a parallel application because another process might have inserted the value since the lookup.
+  The Erlang/OTP developers saw this problem and added the \verb|insert_new| operator described below. 
 \item[insert\_new(Tab, ObjectOrObjects) $\rightarrow$ boolean()]
   This operation will insert the given object or objects if no object with the same key as any of the object(s) exists.
   If a key already exists the operation will return \verb|false| and otherwise \verb|true|.
