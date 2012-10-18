@@ -3,6 +3,9 @@
 \usepackage{listings} 
 \usepackage{graphicx}
 \usepackage{epstopdf}
+\usepackage{courier}
+%\usepackage[scaled]{inconsolata}
+
 %\usepackage{cite}
 
 % type user-defined commands here
@@ -170,42 +173,41 @@ Users that want to perform a sequence of operations atomically can use Mnesia or
 
 \section{Previous Work}
 
-Scott Lystig Fritchie has suggested a new ETS table implementation based on Judy-arrays~\cite{ScottEtsJudy}.
-Judy-arrays is a data structure similar to tries but it make use of compression techniques to waste less space and make better use of the processor cache.
+Scott Lystig Fritchie has suggested an ETS table implementation based on Judy-arrays~\cite{ScottEtsJudy}.
+A Judy-array is a data structure similar to a trie but it uses compression techniques to waste less space and improve cache performance.
 The performance of a Judy-array based implementation is experimentally compared to the AVL-tree (\verb|ordered_set|) and the linear hash table (\verb|set|, \verb|bag| and \verb|duplicate_bag|) implementations currently available.
 For large table sizes the operations lookup, insert and update seem to be fastest with the Judy-array based implementation.
 However, term deletion and table traversal seem to be slower in the Judy-array based implementation.
 Fritchie does not give any suggestions on how to make a concurrent variant of the Judy-array based implementation.
-It would probably not be trivial to make a good concurrent variant of the Judy-array based implementation since operations can modify the location of multiple values.
 
 Patrik Nyblom has suggested the addition of software transactional memory (STM) support for Erlang ETS tables~\cite{PatrikErlangTrans}.
-In this work it is argued that STM support could be added to Erlang with only minor changes to the ETS implementation.
+Nyblom argued that STM support could be added to Erlang with only minor changes to the ETS implementation~\cite{PatrikErlangTrans}.
 The suggested implementation would not effect the performance of ETS when the transactional features are not used.
-At the same time it could increase parallelism for use cases where the only alternative without transactional memory support is to serialize all operations on the ETS table (or tables).
-Benchmark results for a prototype of ETS with transactional memory, show that transactional memory support for ETS could make some use cases more scalable with the number of cores.
+At the same time, the  STM implementation, could increase parallelism for use cases where the only alternative without transactional memory support is to serialize all operations on the ETS table (or tables).
+Benchmark results for a prototype of ETS with transactional memory, show that transactional memory support for ETS could make some use cases more scalable.
 The kind of use cases that could benefit from the transactional ETS tables are where several ETS operations need to be performed atomically.
-For example, a program that models a bank system where several users transfer money between two bank accounts could benefit from transactional ETS tables.
+For example, a program that models a bank system where several users transfer money between two bank accounts could benefit from transactional ETS tables. Today, these kind of transactions need to be serialized.
 
 \section{Handling of Tables}
 
 The infrastructure for the handling of tables is described in this section.
-An overview of the data structures used on a global level is provided in section~\ref{sec:tables_overview}.
-How locking is done when tables are accessed concurrently is described in section~\ref{sec:tables_locking}.
+An overview of the data structures used on a global level is provided in Section~\ref{sec:tables_overview}.
+How locking is done when tables are accessed concurrently is described in Section~\ref{sec:tables_locking}.
 
 \subsection{Global data structures}
 \label{sec:tables_overview}
 
-The following data structures are maintained on a system-wide level and are used for ``generic book-keeping''.
+The following data structures are maintained on a system-wide level and are used for ``generic book keeping''.
 Low level operations like finding the main data structure for a particular table or handling transfers of ownership use only these data structures.
 
 \begin{description}
 \item[meta\_main\_table]
-  Contains pointers to the main data structure of each table that exist in the system at any point during runtime.
+  Contains pointers to the main data structure of each table that exists in the system at any point during runtime.
   TIDs map to indices in this table.
 \item[meta\_name\_table]
   Contains mappings from the names of named tables to the respective TIDs.
 \item[meta\_pid\_to\_tab]
-  Maps processes (PIDs) to tables owned by them.
+  Maps processes (PIDs) to the tables they own.
   It is used when a process exits to handle transfers of table ownership or table deletion.
 \item[meta\_pid\_to\_fixed\_tab]
   Maps processes (PIDs) to tables that are fixated by them (see also Section\ref{sec:fixation}).
@@ -213,7 +215,7 @@ Low level operations like finding the main data structure for a particular table
 
 \subsection{Locking} \label{sec:tables_locking}
 
-Different levels of locking are required for each operation on an ETS table.
+Different levels of locking are required for different operations on an ETS table.
 The same lock data structure is accessed before both read and write operations on the data protected by the lock; operations simply request and obtain different levels of access.
 For example, acquisition of the lock to read the data should not block other read operations but should block all the write operations until the lock is released.
 Similarly, acquisition of the lock to write on the data should block both read and write operations on the same data.
@@ -224,27 +226,19 @@ Operations may also lock different sets of resources associated with a particula
 \item Creation, deletion and renaming of a named table also require the acquisition of the write lock protecting the \verb|meta_name_table|.
 \item Read and write operations on a table's objects require the acquisition of appropriate table locks.
   Using the default options, each table has just one main lock, used for all entries.
-  Depending on the type and the options specified when a table is created, read and/or write operations for different keys can be performed simultaneously, by having each lock only parts of the table.
-  We give further details in section~\ref{sec:table_types}.
+  Depending on the type and the options specified when a table is created, read and/or write operations for different keys can be performed simultaneously, by locking only a part of the table.
+  We give further details in Section~\ref{sec:table_types}.
 \end{itemize}
 
 \section{Table Types} \label{sec:table_types}
 
 Tables of type \verb|set|, \verb|bag| and \verb|duplicate_bag| do not impose any particular order between their entries.
-These tables are implemented in the runtime system as hash tables.
+These tables are implemented as hash tables.
 In contrast, \verb|ordered_set| tables have their entries ordered according to their keys and are implemented as AVL trees.
-The runtime system is structured in such a way that low-level operations which are transparent to the underlying implementation of a table are handled with normal C functions, while operations that depend on the implementation are dispatched from the equivalent of a method table.
 
 \subsection{Hash tables}
 
-Hash tables distribute their key-value entries to buckets, depending on a hash value generated using the key.
-
-\subsubsection{Fine Locking}
-
-Protected and public hash tables support ``fine locking'' if the option \verb|write_concurrency| is provided during creation.
-In this case, apart from the main table lock, an additional array of locks is allocated during table creation and each lock ``protects'' a subset of the buckets.
-The size of this lock array is currently defined at \emph{compile time} to 16.
-(Therefore each lock protects those buckets whose index modulo 16 equals the lock's index.)
+Hash tables distribute their key-value entries to buckets, depending on a hash value generated from the key.
 
 \subsubsection{Data Structure}
 
@@ -313,6 +307,14 @@ Once the first bucket not accessible through the previous extended segment is de
 This ``early replacement'' happens in order to avoid deallocating an extended segment while its segment table may still be used by other threads.
 When the extended segment is later deallocated, the contents of all the buckets in the bucket section have been rehashed, seizing *all* locks, so there cannot exist any processes still executing code using the old extended segment pointer.
 
+\subsubsection{Fine-grained Locking}
+
+Protected and public hash tables support fine-grained locking if the option \verb|write_concurrency| is provided during creation.
+In this case, apart from the main table lock, an additional array of locks is allocated during table creation and each lock ``protects'' a subset of the buckets.
+The size of this lock array is currently defined at \emph{compile time} to 16.
+(Therefore each lock protects those buckets whose index modulo 16 equals the lock's index.)
+
+
 \subsubsection{Hash table types}     % section 2.1
 
 With the underlying implementation being the same for all the types of hash tables, the specific type of the table introduces only minor differences in specific operations.
@@ -373,7 +375,7 @@ The mapping of PIDs and TIDs is used to remove fixations when processes exit.
 \section{Benchmark} \label{sec:benchmark}
 
 A simple benchmark has been performed.
-The purpose of the benchmark is to see how the \verb|write_concurrency| and \verb|read_concurrency| options affect the performance of different table types on a ''real world'' problem.
+The purpose of the benchmark is to see how the \verb|write_concurrency| and \verb|read_concurrency| options affect the performance of different table types on a ``real'' problem.
 The benchmark creates workers that all do \verb|lookup|s and \verb|insert|s on the same ETS table.
 It was run on a computer with 64 cores (AMD Bulldozer Architecture).
 It was run with all combinations of \verb|write_concurrency| and \verb|read_concurrency| together with the table types \verb|set| and \verb|ordered_set|.
@@ -399,19 +401,19 @@ The program explores the possible solutions using breadth first search.
 Explored configurations are saved in an ETS table to avoid repeating work.
 
 The program has one coordinator process and a number of worker processes.
-At a specific level in the search tree, the coordinator divides the configurations that needs to be explored in the next level evenly and sends them to the workers.
+At a specific level in the search tree, the coordinator divides the configurations that need to be explored in the next level evenly and sends them to the workers.
 The workers send a message to the coordinator if a solution is found.
-If a worker gets a configuration that is not a solution, it is expanded by generating all possible configurations that can be created by performing one sort step.
+If a worker gets a configuration that is not a solution, the configuration is expanded by generating all possible configurations that can be created by performing one sort step.
 
-Directly after a configuration is generated, it is checked whether it already exists in the ETS table cache with the \verb|ets:member| function.
+Directly after a configuration is generated, it is checked whether the configuration already exists in the ETS table cache with the \verb|ets:member| function.
 If it already exists, it is thrown away because the configuration has already been visited.
 Otherwise, the configuration is inserted in the ETS table with the \verb|ets:insert_new| operation.
 The return value of \verb|ets:insert_new| is checked to make sure that the configuration has not been inserted by another process between the call to \verb|ets:member| and \verb|ets:insert_new|.
-The Erlang code that is interacting with the ETS table cache in the workers can be seen in listing~\ref{li_erlang_ets_interaction}.
+The Erlang code that is interacting with the ETS table cache in the workers can be seen in Listing~\ref{li_erlang_ets_interaction}. 
 
-\lstset{language=erlang, caption=Worker code that is interacting with ETS, label=li_erlang_ets_interaction}
+\lstset{basicstyle=\ttfamily, keywordstyle=\bfseries, language=erlang, caption=Worker code that is interacting with ETS, label=li_erlang_ets_interaction}
 \begin{lstlisting}[float=htb]
-  IsFound = ets:member(Cache, MoveArray),
+IsFound = ets:member(Cache, MoveArray),
 case IsFound of
   false ->
     Inserted = ets:insert_new(Cache, {MoveArray}),
@@ -428,14 +430,14 @@ end
 
 A worker sends back all the configurations that need to be explored in the next level to the coordinator, when it has processed all given configurations on the current level.
 
-\subsection{Results}
+\subsection{Results} 
 
-The results of the benchmark can be seen in figure~\ref{fig:benchmark_results}.
+The results of the benchmark can be seen in Figure~\ref{fig:benchmark_results}.
 The filled straight line labeled \emph{serial} is the performance of a serial version of the benchmark program.
 The serial version can also be found on www.github.com\footnote{http://github.com/kjellwinblad/ets\_impl\_project/blob/master/benchmark/single\_1.erl}.
-The graphs with \emph{set} in the label show the benchmark times for the table type \verb|set|.
-The graphs with \emph{ordset} in the label show the benchmark times for the table type \verb|ordered_set|.
-A \emph{w} in the label means that the table has \verb|write_concurrency| enabled and an \emph{r} in the label means that the table has \verb|read_concurrency| enabled.
+The graphs with ``set'' in the label show the benchmark times for the table type \verb|set|.
+The graphs with ``ordset'' in the label show the benchmark times for the table type \verb|ordered_set|.
+A ``w'' in the label means that the table has \verb|write_concurrency| enabled and an ``r'' in the label means that the table has \verb|read_concurrency| enabled.
 
 \begin{figure}[htb]
 \centering
@@ -446,34 +448,34 @@ A \emph{w} in the label means that the table has \verb|write_concurrency| enable
 
 The table type \verb|set| with \verb|write_concurrency| enabled seems to give similar performance both with and without \verb|read_concurrency| enabled.
 All other configurations have similar performance.
-It is not surprising that all \verb|ordered_set| configurations perform similarly since the \verb|write_concurrency| and \verb|read_concurrency| options do not affect this table type at all.
+The \verb|write_concurrency| option does not affect the table type \verb|ordered_set| so the graphs with  \verb|write_concurrency| enabled together with \verb|ordered_set| are not included.
 The \verb|ordered_set| table type should theoretically have more expensive \verb|lookup| and \verb|insert| operations compared to the \verb|set| table type.
 This does not seem to have any significant effect on this benchmark.
 
-In this particular benchmark it is evident that \verb|write_concurrency| for the table type \verb|set| is particularly important for scalability.
-For the other configurations the performance seems to get worse, when more than five worker processes are used.
-It is reasonable to assume that the reason behind that is that contention becomes higher when the number of workers is increased.
+It is clear that \verb|set| table type with \verb|write_concurrency| enable scale best for this benchmark.
+This is not surprising since \verb|set| together with \verb|write_concurrency| allow processes to do other operations on the table, concurrently during write operations. 
 
 \section{Scalable ETS Suggestions}
 
-The benchmark described in section~\ref{sec:benchmark}, shows that fine grained locking (provided by the \verb|write_concurrency| option) can be very important for scalability.
+The benchmark described in Section~\ref{sec:benchmark}, shows that fine grained locking (provided by the \verb|write_concurrency| option) can be very important for scalability.
 The number of locks used when fine grained locking is enabled is hard-coded to 16 in the current implementation.
 It is tempting to make the locking even more fine grained, since it could possibly make ETS more scalable.
-However, it might increase processor cache misses and have other unforeseen effects so it is not certain that it will give better scalability.
-The benchmark described in section~\ref{sec:benchmark} has also been run with a versions of the runtime environment with the number of locks set to 32 and 64.
+However, it might increase processor cache misses since more locks make use of more memory.
+The benchmark described in Section~\ref{sec:benchmark} has also been run with versions of the runtime environment with the number of locks set to 32 and 64.
 This change did not seem to have any significant effect on the performance of the benchmark program.
-There might be other bottleneck in this particular benchmark that are more important.
+There might be other bottlenecks in this particular benchmark that are more important.
 It would be interesting to look more deeply into how the number of locks affects the performance of other benchmarks.
 
-The benchmarks of Judy-array based ETS table implementations that are described by Fritchie, suggests that there are other table implementations that are significantly faster than the current ones for some use cases~\cite{ScottEtsJudy}.
+The benchmarks of Judy-array based ETS table implementations that are described by Fritchie suggests that there are other table implementations that are significantly faster than the current ones for some use cases~\cite{ScottEtsJudy}.
 Fritchie did not discuss how to make the Judy-array based ETS table implementation concurrent.
-Prokopec, Bagwell and Odersky have described a ''lock-free'' concurrent data type called CTrie which is similar to the ETS table implementation suggested by Fritchie~\cite{ProkopecCTrie}.
-Benchmarks indicate that CTries scale well compared to many other concurrent table implementations~\cite{ProkopecCTrie}.
-Using a CTrie to implement ETS tables could potentially provide better scalability than the current implementation.
+Prokopec, Bagwell and Odersky have described a ``lock-free'' concurrent data type called CTrie~\cite{ProkopecCTrie} which is similar to the ETS table implementation suggested by Fritchie.
+Benchmarks indicate that CTries scale well for insert operations~\cite{ProkopecCTrie}.
+Using a CTrie to implement ETS tables could potentially provide better scalability than the current implementation for some use cases.
 
 The current ETS table implementation has no good support for use cases when more than one table operation need to be performed atomically.
 The only practical way to support that use case with the current ETS implementation is to serialize all access to the ETS table or ETS tables involved.
-Transactional support for ETS tables as suggested in~\cite{PatrikErlangTrans} could be a way to support this use case in a much more scalable way.
+The serialization can be done by using a process as a proxy to the ETS table.
+Transactional support for ETS tables as suggested by Nyblom~\cite{PatrikErlangTrans} could be a way to support this use case in a much more scalable way.
 
 In the current implementation of ETS, all terms that are inserted or fetched from an ETS table are copied from or to the ETS table.
 This might be expensive both in respect to time and memory if many processes access the same objects in the table.
@@ -486,8 +488,8 @@ There exist implementations of binary trees that scale well and that have suppor
 Bronson, Casper, Chafi and Olukotun have described a relaxed AVL-tree data-structure with STM inspired methods for thread safety~\cite{BronsonPracTree}.
 This implementation could give much better scalability on a multi-core computer than the current \verb|ordered_set| implementation.
 
-Furthermore, there are many more concurrent implementation of lookup tables that could be used in ETS and potentially provide better scalability.
-It could be interesting to do a more in depth study of the implementation that are in use today.
+Furthermore, there are many more concurrent implementations of lookup tables that could be used in ETS and potentially provide better scalability.
+It could be interesting to do a more in-depth study of the implementation that are in use today.
 For example \verb|ConcurrentHashMap| in the Java library does not require any locks for lookup operations \cite{BrianConcHashMap}.
 
 
