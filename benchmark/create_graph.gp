@@ -14,7 +14,5 @@ plot f(x) title 'serial',\
      "data/benchmark_set_w.dat" using 2 title 'set,w' with linespoints,\
      "data/benchmark_set_r.dat" using 2 title 'set,r' with linespoints,\
      "data/benchmark_set.dat" using 2 title 'set' with linespoints,\
-     "data/benchmark_oset_w_r.dat" using 2 title 'ordset,w,r' with linespoints,\
-     "data/benchmark_oset_w.dat" using 2 title 'ordset,w' with linespoints,\
      "data/benchmark_oset_r.dat" using 2 title 'ordset,r' with linespoints,\
      "data/benchmark_oset.dat" using 2 title 'ordset' with linespoints

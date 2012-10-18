@@ -242,22 +242,24 @@ Hash tables distribute their key-value entries to buckets, depending on a hash v
 
 \subsubsection{Data Structure}
 
-The current implementation\footnote{All the particular sizes mentioned reflect faithfully the implementation as of R15B02.} of ETS tables is based on linear dynamic hash tables~\cite{Larson}.
+The current implementation\footnote{All the particular sizes mentioned refer to the implementation of R15B02.} of ETS tables is based on linear dynamic hash tables~\cite{Larson}.
 The main data structure is called ``extended segment'' and has two parts:
 \begin{enumerate}
 \item A ``bucket'' section, containing 256 pointers to buckets which are lists of objects.
   These lists correspond to the common ``chaining'' implementation of a hash table.
-\item A ``segment'' section, pointing to ``bucket'' sections.
+\item A ``segment'' section, containing pointers to ``bucket'' sections.
 \end{enumerate}
-The runtime system can also allocate plain ``bucket'' sections, without ``segment'' sections attached.
-As an invariant, the entry point for all access to a hash table's data is a ``current'' extended segment, but there might also exist older extended segments that are still used for their bucket sections and may also be used again for their segment sections if the table is shrinked.
+Figure~\ref{fig:hash_table_structure} illustrate how the segments are connected to each other. 
+Plain bucket sections, without any ``segment'' sections attached can also be allocated.
+The entry point for all accesses to a hash table's data is the ``current'' extended segment. 
+Extended segments created earlier are still used for their bucket sections and may also be used again for their segment sections if the table is shrunk.
 
 As an invariant, buckets in a continuous range starting with bucket 0, are declared as ``active'' buckets.
 The index of the highest active bucket is stored as \verb|nactive|.
 
 \subsubsection{Read and write operations}
 
-To operate with some object of the table, the hash value of the key of the object is first calculated.
+To find the place of an object in the table, the hash value of the key of the object is first calculated.
 This hash value is then masked to obtain the index of a bucket of the table.
 Only some of the least significant bits of the hash value are used, depending on the index of the highest active bucket.
 If the index obtained through this masking corresponds to a bucket that is active then this is the bucket that should contain the object.
@@ -278,9 +280,9 @@ This happens because regardless of the specific type of hash table, entries with
   \label{fig:hash_table_structure}
 \end{figure}
 
-\subsubsection{Growing}
+\subsubsection{Expansion}
 
-Growing is triggered after table insertion, when the total number of entries in the table exceeds a predefined value.
+Expansion is triggered after table insertion when the total number of entries in the table exceeds a predefined value.
 Currently this value is set so that if a uniform distribution of objects is assumed, each bucket has a chain length of 6.
 Growing happens by splitting just one bucket, moving objects to the bucket after the one that is currently active.
 The bucket to be split is the one obtained by dropping the newly active bucket's index most significant bit.
