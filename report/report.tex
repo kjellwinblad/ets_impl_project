@@ -333,22 +333,32 @@ Special care should be taken to group together objects with the same key.
 \subsection{Ordered Set table type}
 
 The ordered set table type is implemented with an AVL tree.
-
-There exists no fine locking.
+An AVL tree was first described by G. M. Adelson-Velskii and E. M. Landis.
+The current implementation uses one lock for the whole table.
+The \verb|write_concurrency| option do not have any effect on tables of this table type.
 
 \section{Concurrency Options} \label{sec:concurrency_options}
 
-Read and write concurrency are orthogonal options:
-write concurrency adds finer-level locks that can be used to read or write to particular sets of objects in the table, while read concurrency changes the type of all the locks used by the table.
+The options \verb|write_concurrency| and \verb|read_concurrency| are orthogonal.
+The following table shows how the options affect the different table types:
 
-\subsection{Write Concurrency}
+\begin{center}
+\begin{tabular}{l|p{5cm}|p{5cm}}
+× & Hash based table types & \verb|ordered_set| table type \\ \hline
+\verb|write_concurrency| & 
+The buckets are divided between 16 locks. At most 16 write operations can be done concurrently. 
+& Not affected\\
+\verb|read_concurrency| & 
+Different type of lock(s) optimized for frequent reads are used & 
+A different type of lock optimized for frequent reads are used
+\end{tabular}
+\end{center} 
 
-The addition of finer-level locks is done only on hash-based tables that have either protected or public access rights.
-More details are provided in the relevant section.
+The concurrency options do not affect tables that are set to \verb|private| since they can only be accessed by one process.
 
-\subsection{Read Concurrency}
-
-[Changes mutex\_normal to mutex\_freq\_read]
+Operations that modify several buckets always lock the whole table.
+For example the insert operation may take a list of objects to insert.
+If the parameter given to insert is a list, the whole table will be locket while the objects are inserted to make the operation atomic.
 
 \section{Fixation}
 \label{sec:fixation}
