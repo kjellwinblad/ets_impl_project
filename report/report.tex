@@ -24,7 +24,7 @@ The main goal of this documentation attempt is to understand the scalability lim
 With ETS tables often used to share data between processes in Erlang programs, it is important to have a scalable ETS implementation as data sharing is a common bottleneck in parallel applications.
 
 In particular this report aims to become:
-\begin{itemize}
+\begin{itemize} 
 \item a developer's guide to the current implementation of ETS tables;
 \item a common base of knowledge for further discussion about possible improvements to the scalability of ETS within the context of the RELEASE project.
 \end{itemize}
@@ -38,7 +38,7 @@ In particular this report aims to become:
 Erlang is a garbage collected programming language especially designed to handle parallelism and fault-tolerance well.
 An Erlang program consists of a number of processes.
 Processes can be created by other processes.
-An Erlang process consists of:
+An Erlang process consists of: 
 \begin{itemize}
  \item a mailbox for incoming messages from other processes (implemented as queue),
  \item the current execution stack,
@@ -243,7 +243,7 @@ Hash tables distribute their key-value entries to buckets, depending on a hash v
 \subsubsection{Data Structure}
 
 The current implementation\footnote{All the particular sizes mentioned refer to the implementation of R15B02.} of ETS tables is based on linear dynamic hash tables~\cite{Larson}.
-The main data structure is called ``extended segment'' and has two parts:
+The main data block used in the ETS table implementation of linear dynamic hash tables is called ``extended segment'' and has two parts:
 \begin{enumerate}
 \item A ``bucket'' section, containing 256 pointers to buckets which are lists of objects.
   These lists correspond to the common ``chaining'' implementation of a hash table.
@@ -259,19 +259,23 @@ The index of the highest active bucket is stored as \verb|nactive|.
 
 \subsubsection{Read and write operations}
 
-To find the place of an object in the table, the hash value of the key of the object is first calculated.
+To find the place of an object in the table, the hash value of the key is first calculated.
 This hash value is then masked to obtain the index of a bucket of the table.
 Only some of the least significant bits of the hash value are used, depending on the index of the highest active bucket.
 If the index obtained through this masking corresponds to a bucket that is active then this is the bucket that should contain the object.
 If the bucket is not active, another significant bit is dropped, and the bucket with the resulting index value is used instead.
+ 
 
 The bucket id itself can be divided in two parts: \emph{segment address} and \emph{bucket offset}.
 First, the segment address is used as an index on the segment section of the current ``extended segment'', to find the base pointer of a bucket section.
 Then the bucket offset is used to find the specific bucket in that bucket section.
 
-Under each bucket there exists a chain of hash values that map to it.
-Within each such chain there is no ordering of the objects and new objects are appended at the end of a chain.
-This happens because regardless of the specific type of hash table, entries with the same key need to be detected and grouped together.
+For example, the current ``extended segment'' in Figure~\ref{fig:hash_table_structure} is D.
+If a bucket id contains segment address $1$ and bucket offset $1$, then the operation will first find the ``extended segment'' B containing the bucket, by following the link in D. Finally, the operation will use the bucket offset to find the the bucket marked $257$ in the figure.
+
+Under each bucket there exists a chain of hash values and objects that map to it.
+Within each such chain there is no ordering of the objects and new objects are appended at the end of a chain if no object with the same key exists.
+In the case of \verb|bag| and \verb|duplicate_bag| the objects with the same key are grouped together in the chain.
 
 \begin{figure}[htb]
   \centering
@@ -283,11 +287,16 @@ This happens because regardless of the specific type of hash table, entries with
 \subsubsection{Expansion}
 
 Expansion is triggered after table insertion when the total number of entries in the table exceeds a predefined value.
-Currently this value is set so that if a uniform distribution of objects is assumed, each bucket has a chain length of 6.
-Growing happens by splitting just one bucket, moving objects to the bucket after the one that is currently active.
-The bucket to be split is the one obtained by dropping the newly active bucket's index most significant bit.
-If the segment address of the new bucket corresponds to an index in the segment section that is currently not pointing to a bucket section, a new plain bucket section is allocated and the slot is now pointing to its first entry.
-If this operation would assign a plain bucket section in the last slot of the segment section of the currently active extended segment, a new extended segment is allocated instead, with more slots in its segment section\footnote{
+Currently, this value is set so that if a uniform distribution of objects is assumed, each bucket has a chain length of 6.
+Expansion happens by adding one bucket to the end of the table and by moving objects to the added bucket.
+
+If the index of the bucket added during the expansion is $N$, then the index of the bucket that will be split $M$ is calculated by dropping the most significant bit of $N$.
+Half the objects in the bucket with index  $M$ are moved to the bucket with index $N$.
+Please, see Larson's paper about linear hash tables for a clear explanation with figures~\cite{Larson}.
+
+If the segment address of the new bucket $A$ corresponds to a pointer in the current segment section that is currently not pointing to a segment, a new segment is allocated.
+The allocated segment will be a plain bucket segment if $A$ is not the last slot in the current segment section.
+If $A$ is the last slot in the current segment section, a new extended segment is allocated with more slots in its segment section\footnote{
   The first extended segment has 2 slots in its segment section.
   The second extended segment has 256 slots in its segment section.
   Each next extended segment has 128 more slots in its segment section than the previous.
@@ -297,23 +306,24 @@ This leads to duplication (the same plain bucket sections are accessible from mu
 The new extended segment does not immediately replace the old one as current.
 The replacement happens when yet another segment must be allocated.
 (This will be a plain segment, stored in the segment section of the new extended segment.)
+Figure~\ref{fig:hash_table_structure} shows the structure of the table when several expansions have produced a table containing three extended segments. 
 
 \subsubsection{Shrinking}
 
-Shrinking may happen after deletion, if the total number of entries falls below a predefined value.
-Shrinking works in the reverse direction of growing:
+Shrinking may happen after deletion if the total number of entries falls below a predefined value.
+Shrinking works in the reverse direction of expansion:
 The active bucket with the highest index is merged with its corresponding ``low'' bucket.
 
 Shrinking might lead to the deallocation of a plain or extended bucket segment, if none of the buckets in it is active.
 Once the first bucket not accessible through the previous extended segment is deallocated, the previous extended segment is restored as current extended segment.
 This ``early replacement'' happens in order to avoid deallocating an extended segment while its segment table may still be used by other threads.
-When the extended segment is later deallocated, the contents of all the buckets in the bucket section have been rehashed, seizing *all* locks, so there cannot exist any processes still executing code using the old extended segment pointer.
+When the extended segment is later deallocated, the contents of all the buckets in the bucket section have been rehashed, so there cannot exist any processes still executing code using the old extended segment pointer.
 
-\subsubsection{Fine-grained Locking}
+\subsubsection{Fine-grained Locking}\label{sec:hash_fine_locking}
 
 Protected and public hash tables support fine-grained locking if the option \verb|write_concurrency| is provided during creation.
 In this case, apart from the main table lock, an additional array of locks is allocated during table creation and each lock ``protects'' a subset of the buckets.
-The size of this lock array is currently defined at \emph{compile time} to 16.
+The size of this lock array is currently defined at \emph{compile time} to 16, so at most 16 write operations can be done concurrently.
 (Therefore each lock protects those buckets whose index modulo 16 equals the lock's index.)
 
 
@@ -323,12 +333,11 @@ With the underlying implementation being the same for all the types of hash tabl
 
 \paragraph{Set}
 
-Insertion in tables of \verb|set| type should overwrite the existing value.
-It should also fail if the insertion is performed with a insert\_new operation.
+Insertion in tables of \verb|set| type should overwrite the existing value, if the \verb|insert/2| operation is used and it should fail if the insertion is performed with the \verb|insert_new/2| operation.
 
 \paragraph{Bag, Duplicate Bag}
 
-Special care should be taken to group together objects with the same key.
+Special care should be taken to group together objects with the same key to make the lookup operation easier.
 
 \subsection{Ordered Set table type}
 
@@ -346,11 +355,11 @@ The following table shows how the options affect the different table types:
 \begin{tabular}{l|p{5cm}|p{5cm}}
 × & Hash based table types & \verb|ordered_set| table type \\ \hline
 \verb|write_concurrency| & 
-The buckets are divided between 16 locks. At most 16 write operations can be done concurrently. 
-& Not affected\\
+The buckets are divided between 16 locks. See Section~\ref{sec:hash_fine_locking} for more information. 
+& Not affected\\ \hline
 \verb|read_concurrency| & 
-Different type of lock(s) optimized for frequent reads are used & 
-A different type of lock optimized for frequent reads are used
+Different type of lock(s) optimized for frequent reads are used. & 
+A different type of lock optimized for frequent reads are used.
 \end{tabular}
 \end{center} 
 
