@@ -176,8 +176,8 @@ For example, a program that models a bank system where several users transfer mo
 \section{Handling of Tables}
 
 The infrastructure for the handling of tables is described in this section.
-An overview of the data structures used on a global level is provided in section~\ref{sec:tables_overview}.
-How locking is done when tables are accessed concurrently is described in section~\ref{sec:tables_locking}.
+An overview of the data structures used on a global level is provided in Section~\ref{sec:tables_overview}.
+How locking is done when tables are accessed concurrently is described in Section~\ref{sec:tables_locking}.
 
 \subsection{Global data structures}
 \label{sec:tables_overview}
@@ -195,7 +195,7 @@ Low level operations like finding the main data structure for a particular table
   Maps processes (PIDs) to tables owned by them.
   It is used when a process exits to handle transfers of table ownership or table deletion.
 \item[meta\_pid\_to\_fixed\_tab]
-  Maps processes (PIDs) to tables that are fixated by them (see also Section\ref{sec:fixation}).
+  Maps processes (PIDs) to tables that are fixated by them (see also Section~\ref{sec:fixation}).
 \end{description}
 
 \subsection{Locking} \label{sec:tables_locking}
@@ -212,7 +212,7 @@ Operations may also lock different sets of resources associated with a particula
 \item Read and write operations on a table's objects require the acquisition of appropriate table locks.
   Using the default options, each table has just one main lock, used for all entries.
   Depending on the type and the options specified when a table is created, read and/or write operations for different keys can be performed simultaneously, by having each lock only parts of the table.
-  We give further details in section~\ref{sec:table_types}.
+  We give further details in Section~\ref{sec:table_types}.
 \end{itemize}
 
 \section{Table Types} \label{sec:table_types}
@@ -443,11 +443,11 @@ It is reasonable to assume that the reason behind that is that contention become
 
 \section{Scalable ETS Suggestions}
 
-The benchmark described in section~\ref{sec:benchmark}, shows that fine grained locking (provided by the \verb|write_concurrency| option) can be very important for scalability.
+The benchmark described in Section~\ref{sec:benchmark}, shows that fine grained locking (provided by the \verb|write_concurrency| option) can be very important for scalability.
 The number of locks used when fine grained locking is enabled is hard-coded to 16 in the current implementation.
 It is tempting to make the locking even more fine grained, since it could possibly make ETS more scalable.
 However, it might increase processor cache misses and have other unforeseen effects so it is not certain that it will give better scalability.
-The benchmark described in section~\ref{sec:benchmark} has also been run with a versions of the runtime environment with the number of locks set to 32 and 64.
+The benchmark described in Section~\ref{sec:benchmark} has also been run with a versions of the runtime environment with the number of locks set to 32 and 64.
 This change did not seem to have any significant effect on the performance of the benchmark program.
 There might be other bottleneck in this particular benchmark that are more important.
 It would be interesting to look more deeply into how the number of locks affects the performance of other benchmarks.
