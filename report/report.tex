@@ -372,23 +372,42 @@ If the parameter given to insert is a list, the whole table will be locket while
 \section{Fixation}
 \label{sec:fixation}
 
-A process can call \texttt{ets:safe\_fixtable(Table, true $|$ false)} to put a fixation on a table implemented with a hash table (\verb|set|, \verb|bag| or \verb|duplicate_bag|).
-When a table is fixed, a sequence of \verb|first/1| and \verb|next/2| calls are guaranteed to succeed and each object in the table will only be returned once, even if objects are removed or inserted during the traversal (keys for new objects inserted during the traversal may be returned by \verb|next/2|, depending on the internal ordering of the keys).
-This high-level guarantee can be simplified into the following 2 low-level ones:
+In many applications it is common to iterate over all elements in a table.
+For example, in a table containing people, one might want to find all people older than 18 years.
+To find all those people it is necessary to visit all elements of the table, if it is one of the hash table types.
+If the table is of the type \verb|ordered_set| one can do it more efficiently by making use of the fact that the objects are ordered.
+
+A table can be traversed with the help of the functions \verb|ets:first/1| and \verb|ets:next/2|.
+The function \verb|ets:first/1| takes a table identifier as parameter and \verb|ets:next/2| takes a table identifier and a key.
+In a concurrent application keys might be deleted and/or added while the table is traversed.
+An exception can occur when calling next, on a table with one of the hash table types, if the key does not exist in the table.
+This will not happen when the \verb|ordered_set| table type is used because the implementation of  \verb|ets:next/2| make use of the ordering of keys.
+If a key does not exist, the object with the closest key which is greater than the given key will be returned.
+
+One way of traversing a table of one of the hash table types without having to handle exceptions from \verb|ets:next/2| calls, would be to have the table private or at least make sure that no other process access it while it is traversed.
+This is not very efficient since all other processes that need to access the table have to wait until the the traversal is finished.
+To solve this problem the function \texttt{ets:safe\_fixtable(Table, true $|$ false)} is available.
+The function can be used to activate and deactivate safe traversal of a table. 
+Safe traversal means that a \verb|ets:first/1| and \verb|ets:next/2| traversal of the table will not give an exception from a \verb|ets:next/2| call.
+The function \verb|ets:safe_fixtable/2| may be called for tables of the table type \verb|ordered_set| but will not have any effect in that case.
+
+Safe traversal does not mean that the table can not change until it is not set to safe traversal.
+However, when traversing the objects in the table, one particular object will only be returned once, even if objects are removed or inserted during the traversal.
+This high-level description can be simplified into the following two low-level ones:
 
 \begin{enumerate}
 \item Keys will not totally disappear from the table.
-  A key can thus be used as an iterator to find the next key in iteration sequence.
+  A key can thus be used as an iterator to find the next key in the iteration sequence.
   Note however that this does not mean that (pointers to) table objects are guaranteed to be maintained while the table is fixated.
   A \verb|bag| or \verb|duplicate_bag| may actually remove objects as long as there is at least one object left in the table with the same key.
 \item Objects will not be moved between buckets due to table grow/shrink.
-  This will guarantee that iterations do not miss keys or get double-hits.
+  This will guarantee that iterations do not miss keys or get double hits.
 \end{enumerate}
 
 \subsection{Implementation}
 
 Fixation is monitored by a flag on the table itself and a mapping between PIDs and the identifiers of the tables that the respective process has fixated.
-The fixation flag is checked before growing or shrinking a table to make sure that possible split or merges won't lead into duplicate appearance of objects in a traversal.
+The fixation flag is checked before growing or shrinking a table to make sure that possible split or merges will not lead to duplicate appearance of objects in a traversal.
 Objects on a fixed table are not deleted if there exist no other objects with the same key.
 Instead objects are marked with an ``invalid\_hash'' flag (pseudo-deleted) and added to a list with objects that must be deleted after the fixation has been lifted.
 
