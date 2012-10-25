@@ -37,7 +37,6 @@ In particular this report aims to become:
 
 Erlang is a garbage collected programming language especially designed to handle parallelism and fault-tolerance well.
 An Erlang program consists of a number of processes.
-Processes can be created by other processes.
 An Erlang process consists of: 
 \begin{itemize}
  \item a mailbox for incoming messages from other processes (implemented as queue),
@@ -46,7 +45,7 @@ An Erlang process consists of:
  \item a process dictionary (a key-value map which can only be directly accessed from the owning process).
 \end{itemize}
 From the Erlang programmer's point of view, processes do not share any mutable data.
-Processes communicate with each other by sending messages that will appear in the receiving process' mailbox.
+The main way for processes to communicate with each other is by sending messages that will appear in the receiving process' mailbox.
 The data in a message sent from one process to another, is in most cases copied from the heap of the sending process to the heap of the receiving process.
 The exception, in the current Erlang/OTP distribution, is values of the binary data type.
 Values of the binary data type are stored in a special data area and only the reference to the binary is copied when messages containing binaries are sent\footnote{Only the reference of the binary is copied when it is sent to another process in the same Erlang node, but the whole binary is copied if it is sent to a process in another Erlang node.}.
@@ -55,12 +54,11 @@ The reasoning behind the special case for binaries, is that binaries are usually
 
 The copying can be expensive since the time and space required to do a copy depend on the size of the message.
 However, the processes can be garbage collected independently when data is not shared by the processes.
-The independent garbage collection can be important for the performance of parallel applications, since all other processes can continue unaffected while some are being garbage collected.
-It is worth noting that the copying of messages is the implementation chosen for the current Erlang/OTP distribution but it may be changed in the future.
+The independent garbage collection can be important for the performance of parallel applications, since all other processes can continue unaffected while some are being garbage collected\footnote{
 An alternative Erlang implementation that run on the Java Virtual Machine, called Erjang, just passes the messages' reference when messages are sent.
-Thus, the Erjang implementation sends messages faster but can not garbage collect the processes independently.
+Thus, the Erjang implementation sends messages faster but can not garbage collect the processes independently.}.
 
-\section{Introduction to Erlang Term Storage}
+\section{Introduction to Erlang Term Storage}\label{sec:ets_introduction}
 
 Erlang Term Storage (ETS) is a feature included in the Erlang/OTP runtime system.
 It supports storage of Erlang tuples (also called \emph{objects} in this report) outside the processes' heaps.
@@ -68,14 +66,14 @@ ETS makes use of dedicated data structures called \emph{ETS tables} to store dat
 The \emph{ETS tables} are mutable key-value maps.
 ETS provides different table types with different properties, but they all share a common interface.
 
-It is a well known fact that data that needs to be accessed and modified by several processes is a common bottleneck in parallel programs.
+It is a well known that data that needs to be accessed and modified by several processes is a common bottleneck in parallel programs.
 Therefore, it is important for Erlang programmers to have an efficient way of communicating data between processes.
 In some programs the best way to communicate data between processes is to use Erlang's message system.
 In other programs ETS can be used as a convenient and efficient way to accomplish data sharing. 
 The program presented in Section~\ref{sec:benchmark} is an example of a program where ETS is useful.
+
 An Erlang ETS table behaves as if a dedicated process served requests for insertions, lookups and other operations on a key-value dictionary.
 However, since ETS is mostly implemented in the lower level programming language C, it is faster than what could be accomplished with a pure Erlang implementation.
-
 The following are the major reasons why ETS can be more efficiently implemented in C than in Erlang\footnote{The major reason why C was chosen for implementing ETS and not any other lower level programming language is that Erlang/OTP runtime system is implemented in C.}:
 \begin{itemize}
 \item
@@ -88,7 +86,7 @@ Long-lived data are therefore copied many times during such passes.
 Storing this data in an ETS table which is not garbage collected can improve the efficiency of programs.
 \end{itemize}
 
-Erlang tuples that are inserted to an ETS table are copied from the heap of the process that is inserting the data to the table.
+Erlang tuples that are inserted in an ETS table are copied from the heap of the process that is inserting the data to the table.
 Erlang tuples that are retrieved from an ETS table are copied from the memory of the table to the retrieving process' heap.
 Values of the binary data type are exceptions as they are when messages are sent between processes.
 The reason why the whole tuple is copied and not just a reference to the tuple, is the same as the reason why messages are copied described in Section~\ref{sec:erlang_intro}.
@@ -119,7 +117,7 @@ The \verb|ets:new/2| BIF can also take a list of options that specify:
 \item
   Whether the table type is \verb|set|, \verb|bag|, \verb|duplicate_bag|, or \verb|ordered_set|.
   The table types \verb|set|, \verb|bag| and \verb|duplicate_bag| are implemented as a linear hash table.
-  In tables of the \verb|set| data type all inserted tuples need to have an unique queue.
+  In tables of the \verb|set| data type all inserted tuples need to have an unique key.
   Whereas, in tables of the \verb|bag| data type there can be several tuples with the same key but all inserted tuples need to be unique.
   Finally, the \verb|duplicate_bag| allow several copies of the same tuple.
   The \verb|ordered_set| table type is implemented as AVL tree.
@@ -137,7 +135,7 @@ If the owner of an ETS table terminates the table will be deleted, unless the \v
 Developers can use the \verb|heir| option to specify a process that will inherit the table when the current owner terminates.
 A process that is set as \verb|heir| will receive a message signaling the transfer of table ownership.
 
-\section{Overview of Table Operations}
+\section{Overview of Table Operations}\label{sec:table_operations}
 
 This section gives an overview of the most fundamental ETS table operations.
 The Erlang documentation for ETS has a complete description of all table operations.
@@ -266,9 +264,9 @@ If the index obtained through this masking corresponds to a bucket that is activ
 If the bucket is not active, another significant bit is dropped, and the bucket with the resulting index value is used instead.
  
 
-The bucket id itself can be divided in two parts: \emph{segment address} and \emph{bucket offset}.
-First, the segment address is used as an index on the segment section of the current ``extended segment'', to find the base pointer of a bucket section.
-Then the bucket offset is used to find the specific bucket in that bucket section.
+The bucket id can be divided into the two parts \emph{segment address} and \emph{bucket offset}.
+First, the segment address is used as an index on the segment section of the current ``extended segment'', to find the pointer to a bucket section.
+The bucket offset is used to find the specific bucket in that bucket section.
 
 For example, the current ``extended segment'' in Figure~\ref{fig:hash_table_structure} is D.
 If a bucket id contains segment address $1$ and bucket offset $1$, then the operation will first find the ``extended segment'' B containing the bucket, by following the link in D. Finally, the operation will use the bucket offset to find the the bucket marked $257$ in the figure.
@@ -304,8 +302,8 @@ If $A$ is the last slot in the current segment section, a new extended segment i
 After a new extended segment is allocated, all the pointers from the segment section of the old extended segment are copied into the low indices of the segment section of new extended segment.
 This leads to duplication (the same plain bucket sections are accessible from multiple extended segment sections), but enables reaching the contents of a bucket by using the segment section of just the current extended segment.
 The new extended segment does not immediately replace the old one as current.
-The replacement happens when yet another segment must be allocated.
-(This will be a plain segment, stored in the segment section of the new extended segment.)
+The replacement happens when yet another segment must be allocated
+(This will be a plain segment, stored in the segment section of the new extended segment.).
 Figure~\ref{fig:hash_table_structure} shows the structure of the table when several expansions have produced a table containing three extended segments. 
 
 \subsubsection{Shrinking}
@@ -314,7 +312,7 @@ Shrinking may happen after deletion if the total number of entries falls below a
 Shrinking works in the reverse direction of expansion:
 The active bucket with the highest index is merged with its corresponding ``low'' bucket.
 
-Shrinking might lead to the deallocation of a plain or extended bucket segment, if none of the buckets in it is active.
+Shrinking might lead to the deallocation of a plain or extended segment, if none of the buckets in it is active.
 Once the first bucket not accessible through the previous extended segment is deallocated, the previous extended segment is restored as current extended segment.
 This ``early replacement'' happens in order to avoid deallocating an extended segment while its segment table may still be used by other threads.
 When the extended segment is later deallocated, the contents of all the buckets in the bucket section have been rehashed, so there cannot exist any processes still executing code using the old extended segment pointer.
@@ -344,7 +342,7 @@ Special care should be taken to group together objects with the same key to make
 The ordered set table type is implemented with an AVL tree.
 An AVL tree was first described by G. M. Adelson-Velskii and E. M. Landis.
 The current implementation uses one lock for the whole table.
-The \verb|write_concurrency| option do not have any effect on tables of this table type.
+The \verb|write_concurrency| option does not have any effect on tables of this table type.
 
 \section{Concurrency Options} \label{sec:concurrency_options}
 
@@ -366,29 +364,47 @@ A different type of lock optimized for frequent reads are used.
 The concurrency options do not affect tables that are set to \verb|private| since they can only be accessed by one process.
 
 Operations that modify several buckets always lock the whole table.
-For example the insert operation may take a list of objects to insert.
-If the parameter given to insert is a list, the whole table will be locket while the objects are inserted to make the operation atomic.
+For example, if the parameter given to insert is a list, the whole table will be locket while the objects in the list are inserted, to make the operation atomic.
 
 \section{Fixation}
 \label{sec:fixation}
 
-A process can call \texttt{ets:safe\_fixtable(Table, true $|$ false)} to put a fixation on a table implemented with a hash table (\verb|set|, \verb|bag| or \verb|duplicate_bag|).
-When a table is fixed, a sequence of \verb|first/1| and \verb|next/2| calls are guaranteed to succeed and each object in the table will only be returned once, even if objects are removed or inserted during the traversal (keys for new objects inserted during the traversal may be returned by \verb|next/2|, depending on the internal ordering of the keys).
-This high-level guarantee can be simplified into the following 2 low-level ones:
+In many applications it is common to iterate over all elements in a table.
+For example, in a table containing people, one might want to find all people older than 18 years.
+To find all those people it is necessary to visit all elements of the table, if it is one of the hash table types.
+If the table is of the type \verb|ordered_set| and the key is the age, one can do it more efficiently by making use of the fact that the objects are ordered.
+
+A table can be traversed with the help of the functions \verb|ets:first/1| and \verb|ets:next/2|.
+See Section~\ref{sec:table_operations} for more information about these functions.
+In a concurrent application keys might be deleted and/or added while the table is traversed.
+An exception can occur when calling next, on a table with one of the hash table types, if the key does not exist in the table.
+This will not happen when the \verb|ordered_set| table type is used because the implementation of  \verb|ets:next/2| make use of the ordering of keys.
+If a key does not exist, the object with the closest key which is greater than the given key will be returned.
+
+One way of traversing a table of one of the hash table types without having to handle exceptions from \verb|ets:next/2| calls is to have the table private or at least make sure that no other process access it while it is traversed.
+This is not very efficient since all other processes that need to access the table have to wait until the the traversal is finished.
+To solve this problem the function \texttt{ets:safe\_fixtable(Table, true $|$ false)} is available.
+The function can be used to activate and deactivate safe traversal of a table. 
+Safe traversal means that a \verb|ets:first/1| and \verb|ets:next/2| traversal of the table will not give an exception in a \verb|ets:next/2| call.
+The function \verb|ets:safe_fixtable/2| may be called for tables of the table type \verb|ordered_set| but will not have any effect in that case.
+
+Safe traversal does not mean that the table can not change until safe traversal is disabled.
+However, when traversing the objects in the table, one particular object will only be returned once, even if objects are removed or inserted during the traversal.
+This high-level description can be simplified into the following two low-level ones:
 
 \begin{enumerate}
 \item Keys will not totally disappear from the table.
-  A key can thus be used as an iterator to find the next key in iteration sequence.
+  A key can thus be used as an iterator to find the next key in the iteration sequence.
   Note however that this does not mean that (pointers to) table objects are guaranteed to be maintained while the table is fixated.
   A \verb|bag| or \verb|duplicate_bag| may actually remove objects as long as there is at least one object left in the table with the same key.
 \item Objects will not be moved between buckets due to table grow/shrink.
-  This will guarantee that iterations do not miss keys or get double-hits.
+  This will guarantee that iterations do not miss keys or get double hits.
 \end{enumerate}
 
 \subsection{Implementation}
 
 Fixation is monitored by a flag on the table itself and a mapping between PIDs and the identifiers of the tables that the respective process has fixated.
-The fixation flag is checked before growing or shrinking a table to make sure that possible split or merges won't lead into duplicate appearance of objects in a traversal.
+The fixation flag is checked before growing or shrinking a table to make sure that possible split or merges will not lead to duplicate appearance of objects in a traversal.
 Objects on a fixed table are not deleted if there exist no other objects with the same key.
 Instead objects are marked with an ``invalid\_hash'' flag (pseudo-deleted) and added to a list with objects that must be deleted after the fixation has been lifted.
 
@@ -500,7 +516,7 @@ The serialization can be done by using a process as a proxy to the ETS table.
 Transactional support for ETS tables as suggested by Nyblom~\cite{PatrikErlangTrans} could be a way to support this use case in a much more scalable way.
 
 In the current implementation of ETS, all terms that are inserted or fetched from an ETS table are copied from or to the ETS table.
-This might be expensive both in respect to time and memory if many processes access the same objects in the table.
+This might be expensive both in respect to time and memory as explained in Section~\ref{sec:ets_introduction}.
 An alternative would be to use references for terms that are stored in ETS tables.
 The Erlang runtime already uses references for values of the binary data type.
 Therefore, it might be possible to reuse some existing components in the Erlang runtime system, to implement references for terms stored in the ETS tables with some potential performance benefits.
