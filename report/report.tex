@@ -322,7 +322,19 @@ When the extended segment is later deallocated, the contents of all the buckets 
 Protected and public hash tables support fine-grained locking if the option \verb|write_concurrency| is provided during creation.
 In this case, apart from the main table lock, an additional array of locks is allocated during table creation and each lock ``protects'' a subset of the buckets.
 The size of this lock array is currently defined at \emph{compile time} to 16, so at most 16 write operations can be done concurrently.
-(Therefore each lock protects those buckets whose index modulo 16 equals the lock's index.)
+Therefore each lock protects those buckets whose index modulo 16 equals the lock's index.
+
+All insert and delete operations have to update a variable that contains the current number of objects in the table.
+The variable is updated with an atomic instruction.
+Which atomic instruction that is used to update the variable depends on which hardware Erlang/OTP is compiled for.
+
+Only one insert or delete operation can perform shrinking or growing at the same time.
+To make sure that no other process is doing resizing a flag is used. 
+This flag is set before and after resizing with an atomic compare and swap instruction\footnote{Again, which instruction that is used depends on the hardware that the Erlang/OTP is compiled for.}.
+If the flag is already set the attempted resize is aborted and the insert or delete operation completes without doing any resize.
+Therefore, if the intensity of insert or delete operations is very high, there will not be enough time to do enough resizing and the average chain length can either increase or decrease to exceed the limit.
+If the average chain length exceeds the limit, it could be a performance problem.
+If this is a problem in reality is unknown.
 
 
 \subsubsection{Hash table types}     % section 2.1
@@ -526,9 +538,17 @@ There exist implementations of binary trees that scale well and that have suppor
 Bronson, Casper, Chafi and Olukotun have described a relaxed AVL-tree data-structure with STM inspired methods for thread safety~\cite{BronsonPracTree}.
 This implementation could give much better scalability on a multi-core computer than the current \verb|ordered_set| implementation.
 
-Furthermore, there are many more concurrent implementations of lookup tables that could be used in ETS and potentially provide better scalability.
+Furthermore, there are many more concurrent implementations of key-value maps that could be used in ETS and potentially provide better scalability.
 It could be interesting to do a more in-depth study of the implementation that are in use today.
 For example \verb|ConcurrentHashMap| in the Java library does not require any locks for lookup operations \cite{BrianConcHashMap}.
+However, most currently excising concurrent hash table implementation that the authors have found uses a resize operation that require a rehashing of the whole table.
+The rehashing of the whole table at once does not fit well with Erlang's claim to have soft real-time performance characteristics.
+Larson et al. has described a concurrent variant of the linear hash table in US patent nr 6578131~B1~\cite{USPATENT6578131B1}.
+The concurrent variant uses a structure with sub tables.
+The sub tables are implemented in a similar way to Erlang's hash table types but with one lock for each bucket.
+Hashing is used to decide which sub table that will contain a specific key.
+It would probably be easy to extend the current implementation of the ETS hash table types to use a sub table structure.
+Such an extension could make the problems with synchronization when growing and shrinking the table, described in section~\ref{sec:hash_fine_locking}, much smaller.
 
 
 \bibliographystyle{plain}
