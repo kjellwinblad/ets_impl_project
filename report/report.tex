@@ -39,7 +39,7 @@ Erlang is a garbage collected programming language especially designed to handle
 An Erlang program consists of a number of processes.
 An Erlang process consists of: 
 \begin{itemize}
- \item a mailbox for incoming messages from other processes (implemented as queue),
+ \item a mailbox for incoming messages from other processes (implemented as a queue),
  \item the current execution stack,
  \item the process heap (containing data allocated by the process) and
  \item a process dictionary (a key-value map which can only be directly accessed from the owning process).
@@ -50,7 +50,7 @@ The data in a message sent from one process to another, is in most cases copied 
 The exception, in the current Erlang/OTP distribution, is values of the binary data type.
 Values of the binary data type are stored in a special data area and only the reference to the binary is copied when messages containing binaries are sent\footnote{Only the reference of the binary is copied when it is sent to another process in the same Erlang node, but the whole binary is copied if it is sent to a process in another Erlang node.}.
 The allocation and deallocation of binaries is managed by reference counting.
-The reasoning behind the special case for binaries, is that binaries are usually so large that it would be very expensive to do a full copy when sending them.
+The reasoning behind the special case for binaries is that binaries are usually so large that it would be very expensive to do a full copy when sending them.
 
 The copying can be expensive since the time and space required to do a copy depend on the size of the message.
 However, the processes can be garbage collected independently when data is not shared by the processes.
@@ -66,7 +66,7 @@ ETS makes use of dedicated data structures called \emph{ETS tables} to store dat
 The \emph{ETS tables} are mutable key-value maps.
 ETS provides different table types with different properties, but they all share a common interface.
 
-It is a well known that data that needs to be accessed and modified by several processes is a common bottleneck in parallel programs.
+It is well known that data that needs to be accessed and modified by several processes is a common bottleneck in parallel programs.
 Therefore, it is important for Erlang programmers to have an efficient way of communicating data between processes.
 In some programs the best way to communicate data between processes is to use Erlang's message system.
 In other programs ETS can be used as a convenient and efficient way to accomplish data sharing. 
@@ -81,17 +81,17 @@ Erlang does not have efficient support for working with mutable data.
 The only way to handle mutable data inside an Erlang process is to use the Erlang process dictionary.
 However, this is not very practical since the process dictionary was not designed to be used to implement advanced data structures.
 \item 
-The process garbage collector copy the process' data during collections.
-Long-lived data are therefore copied many times during such passes. 
-Storing this data in an ETS table which is not garbage collected can improve the efficiency of programs.
+The process garbage collector copies the process' data during collections.
+Long-lived data therefore is copied many times during such passes. 
+Storing this data in an ETS table, which is not garbage collected can improve the efficiency of programs.
 \end{itemize}
 
 Erlang tuples that are inserted in an ETS table are copied from the heap of the process that is inserting the data to the table.
-Erlang tuples that are retrieved from an ETS table are copied from the memory of the table to the retrieving process' heap.
-Values of the binary data type are exceptions as they are when messages are sent between processes.
-The reason why the whole tuple is copied and not just a reference to the tuple, is the same as the reason why messages are copied described in Section~\ref{sec:erlang_intro}.
+Erlang tuples that are retrieved from an ETS table are copied from the memory of the table to the retrieving process's heap.
+Values of the binary data type are exceptions, as they are when messages are sent between processes.
+The reason why the whole tuple is copied and not just a reference to the tuple is the same as the reason why messages are copied as described in Section~\ref{sec:erlang_intro}.
 
-ETS provides the most common table operations (insert, lookup and delete) as well as operations for searching for all tuples matching a specific criteria and for traversing the tuples in the table.
+ETS provides the most common table operations (insert, lookup and delete) as well as operations for searching for all tuples matching a specific criterion and for traversing the tuples in the table.
 
 The Erlang database, Mnesia, gives the programmer an additional abstraction layer on top of ETS. 
 Mnesia has support for:
@@ -118,7 +118,7 @@ The \verb|ets:new/2| BIF can also take a list of options that specify:
   Whether the table type is \verb|set|, \verb|bag|, \verb|duplicate_bag|, or \verb|ordered_set|.
   The table types \verb|set|, \verb|bag| and \verb|duplicate_bag| are implemented as a linear hash table.
   In tables of the \verb|set| data type all inserted tuples need to have an unique key.
-  Whereas, in tables of the \verb|bag| data type there can be several tuples with the same key but all inserted tuples need to be unique.
+  Whereas in tables of the \verb|bag| data type there can be several tuples with the same key but all inserted tuples need to be unique.
   Finally, the \verb|duplicate_bag| allow several copies of the same tuple.
   The \verb|ordered_set| table type is implemented as AVL tree.
   When traversing the tuples in an \verb|ordered_set|, the tuples are guaranteed to come with the smallest keys first (All Erlang terms have a defined order.).
@@ -169,7 +169,7 @@ Users that want to perform a sequence of operations atomically can use Mnesia or
 \item[last(Tab) $\rightarrow$ Key $|$ \texttt{end\_of\_table}] Returns the last key in the table.
 \end{description}
 
-\section{Previous Work}
+\section{Previous Work}\label{sec:previous_work}
 
 Scott Lystig Fritchie has suggested an ETS table implementation based on Judy-arrays~\cite{ScottEtsJudy}.
 A Judy-array is a data structure similar to a trie but it uses compression techniques to waste less space and improve cache performance.
@@ -289,15 +289,15 @@ Currently, this value is set so that if a uniform distribution of objects is ass
 Expansion happens by adding one bucket to the end of the table and by moving objects to the added bucket.
 
 If the index of the bucket added during the expansion is $N$, then the index of the bucket that will be split $M$ is calculated by dropping the most significant bit of $N$.
-Half the objects in the bucket with index  $M$ are moved to the bucket with index $N$.
-Please, see Larson's paper about linear hash tables for a clear explanation with figures~\cite{Larson}.
+In average half the objects in the bucket with index  $M$ are moved to the bucket with index $N$.
+Please see Larson's paper~\cite{Larson} about linear hash tables for a clear explanation with figures.
 
 If the segment address of the new bucket $A$ corresponds to a pointer in the current segment section that is currently not pointing to a segment, a new segment is allocated.
 The allocated segment will be a plain bucket segment if $A$ is not the last slot in the current segment section.
 If $A$ is the last slot in the current segment section, a new extended segment is allocated with more slots in its segment section\footnote{
   The first extended segment has 2 slots in its segment section.
   The second extended segment has 256 slots in its segment section.
-  Each next extended segment has 128 more slots in its segment section than the previous.
+  Each additional extended segment has 128 more slots in its segment section than the previous.
 }.
 After a new extended segment is allocated, all the pointers from the segment section of the old extended segment are copied into the low indices of the segment section of new extended segment.
 This leads to duplication (the same plain bucket sections are accessible from multiple extended segment sections), but enables reaching the contents of a bucket by using the segment section of just the current extended segment.
@@ -365,7 +365,7 @@ The following table shows how the options affect the different table types:
 \begin{tabular}{l|p{5cm}|p{5cm}}
 × & Hash based table types & \verb|ordered_set| table type \\ \hline
 \verb|write_concurrency| & 
-The buckets are divided between 16 locks. See Section~\ref{sec:hash_fine_locking} for more information. 
+The buckets are divided between 16 locks. Only one lock will be used for all the buckets if this option is not enabled. See Section~\ref{sec:hash_fine_locking} for more information. 
 & Not affected\\ \hline
 \verb|read_concurrency| & 
 Different type of lock(s) optimized for frequent reads are used. & 
@@ -389,7 +389,7 @@ If the table is of the type \verb|ordered_set| and the key is the age, one can d
 A table can be traversed with the help of the functions \verb|ets:first/1| and \verb|ets:next/2|.
 See Section~\ref{sec:table_operations} for more information about these functions.
 In a concurrent application keys might be deleted and/or added while the table is traversed.
-An exception can occur when calling next, on a table with one of the hash table types, if the key does not exist in the table.
+An exception will occur when calling next, on a table with one of the hash table types, if the key does not exist in the table.
 This will not happen when the \verb|ordered_set| table type is used because the implementation of  \verb|ets:next/2| make use of the ordering of keys.
 If a key does not exist, the object with the closest key which is greater than the given key will be returned.
 
@@ -516,7 +516,7 @@ This change did not seem to have any significant effect on the performance of th
 There might be other bottlenecks in this particular benchmark that are more important.
 It would be interesting to look more deeply into how the number of locks affects the performance of other benchmarks.
 
-The benchmarks of Judy-array based ETS table implementations that are described by Fritchie suggests that there are other table implementations that are significantly faster than the current ones for some use cases~\cite{ScottEtsJudy}.
+As mentioned in Section~\ref{sec:previous_work}, the benchmarks of Judy-array based ETS table implementations that are described by Fritchie suggests that there are other table implementations that are significantly faster than the current ones for some use cases~\cite{ScottEtsJudy}.
 Fritchie did not discuss how to make the Judy-array based ETS table implementation concurrent.
 Prokopec, Bagwell and Odersky have described a ``lock-free'' concurrent data type called CTrie~\cite{ProkopecCTrie} which is similar to the ETS table implementation suggested by Fritchie.
 Benchmarks indicate that CTries scale well for insert operations~\cite{ProkopecCTrie}.
@@ -533,6 +533,7 @@ An alternative would be to use references for terms that are stored in ETS table
 The Erlang runtime already uses references for values of the binary data type.
 Therefore, it might be possible to reuse some existing components in the Erlang runtime system, to implement references for terms stored in the ETS tables with some potential performance benefits.
 
+
 The current \verb|ordered_set| table type uses only one lock for the whole data structure.
 There exist implementations of binary trees that scale well and that have support for efficient traversal of the tree.
 Bronson, Casper, Chafi and Olukotun have described a relaxed AVL-tree data-structure with STM inspired methods for thread safety~\cite{BronsonPracTree}.
@@ -541,14 +542,14 @@ This implementation could give much better scalability on a multi-core computer 
 Furthermore, there are many more concurrent implementations of key-value maps that could be used in ETS and potentially provide better scalability.
 It could be interesting to do a more in-depth study of the implementation that are in use today.
 For example \verb|ConcurrentHashMap| in the Java library does not require any locks for lookup operations \cite{BrianConcHashMap}.
-However, most currently excising concurrent hash table implementation that the authors have found uses a resize operation that require a rehashing of the whole table.
+However, most currently existing concurrent hash table implementations that we have found use a resize operation that requires a rehashing of the whole table.
 The rehashing of the whole table at once does not fit well with Erlang's claim to have soft real-time performance characteristics.
-Larson et al. has described a concurrent variant of the linear hash table in US patent nr 6578131~B1~\cite{USPATENT6578131B1}.
-The concurrent variant uses a structure with sub tables.
-The sub tables are implemented in a similar way to Erlang's hash table types but with one lock for each bucket.
-Hashing is used to decide which sub table that will contain a specific key.
-It would probably be easy to extend the current implementation of the ETS hash table types to use a sub table structure.
-Such an extension could make the problems with synchronization when growing and shrinking the table, described in section~\ref{sec:hash_fine_locking}, much smaller.
+Larson et al. described a concurrent variant of the linear hash table in US patent nr 6578131~B1~\cite{USPATENT6578131B1}.
+The concurrent variant uses a structure with sub-tables.
+The sub-tables are implemented in a similar way to Erlang's hash table types but with one lock for each bucket.
+Hashing is used to decide which sub-table will contain a specific key.
+It would probably be easy to extend the current implementation of the ETS hash table types to use a sub-table structure.
+Such an extension could make the problems with synchronization when growing and shrinking the table, as described in section~\ref{sec:hash_fine_locking}, much smaller.
 
 
 \bibliographystyle{plain}
