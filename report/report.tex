@@ -422,15 +422,16 @@ Instead objects are marked with an ``invalid\_hash'' flag (pseudo-deleted) and a
 
 The mapping of PIDs and TIDs is used to remove fixations when processes exit.
 
-\section{Benchmark} \label{sec:benchmark}
+\section{Benchmarks} \label{sec:benchmark}
 
-A simple benchmark has been performed.
-The purpose of the benchmark is to see how the \verb|write_concurrency| and \verb|read_concurrency| options affect the performance of different table types on a ``real'' problem.
+Two simple benchmarks have been performed.
+The purpose of the benchmark described in Section~\ref{sec:application_bench} is to see how the \verb|write_concurrency| and \verb|read_concurrency| options affect the performance of different table types on a ``real'' problem.
 The benchmark creates workers that all do \verb|lookup|s and \verb|insert|s on the same ETS table.
-It was run on a computer with 64 cores (AMD Bulldozer Architecture).
-It was run with all combinations of \verb|write_concurrency| and \verb|read_concurrency| together with the table types \verb|set| and \verb|ordered_set|.
+The benchmark described in Section~\ref{sec:finegrained_bench} has been designed to investigate the effects of different levels of fine-grained locking.
+Both benchmarks were run on a computer with 64 cores (AMD Bulldozer Architecture).
+%It was run with all combinations of \verb|write_concurrency| and \verb|read_concurrency| together with the table types \verb|set| and \verb|ordered_set|.
 
-\subsection{Benchmark Problem}
+\subsection{Application Benchmark}\label{sec:application_bench}
 The benchmark program finds the minimum number of sort steps to sort an array, containing \emph{black} marks, \emph{white} marks and \emph{empty} positions.
 As an example the sequence \verb|"ebbwe"| represents such an array, with \verb|e| marking \emph{empty} position, \verb|w| representing \emph{white} mark and \verb|b| representing \emph{black} mark.
 Black marks can only move towards the right end of the array and white marks can only move towards the left end.
@@ -445,7 +446,7 @@ If the input array can not be sorted the program shall return $-1$.
 For example the minimum number of steps for \verb|"ebbwe"| is $5$.
 The benchmark measures time needed to return the result for the arrays \verb|"bebebbeeeewwwbw"| and \verb|"bebebeeewewewewwe"|.
 
-\subsection{Implementation}
+\subsubsection{Implementation}
 The Erlang program that solves the benchmark problem is available on www.github.com\footnote{http://github.com/kjellwinblad/ets\_impl\_project/blob/master/benchmark/multi\_4.erl}.
 The program explores the possible solutions using breadth first search.
 Explored configurations are saved in an ETS table to avoid repeating work.
@@ -480,7 +481,7 @@ end
 
 A worker sends back all the configurations that need to be explored in the next level to the coordinator, when it has processed all given configurations on the current level.
 
-\subsection{Results} 
+\subsubsection{Results} 
 
 The results of the benchmark can be seen in Figure~\ref{fig:benchmark_results}.
 The filled straight line labeled \emph{serial} is the performance of a serial version of the benchmark program.
@@ -504,6 +505,76 @@ This does not seem to have any significant effect on this benchmark.
 
 It is clear that \verb|set| table type with \verb|write_concurrency| enable scale best for this benchmark.
 This is not surprising since \verb|set| together with \verb|write_concurrency| allow processes to do other operations on the table, concurrently during write operations. 
+
+\subsection{Fine-grained Locking Benchmark}\label{sec:finegrained_bench}
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=1.0\textwidth]{lock_level_graph.eps}
+\caption{ETS table with different number of bucket locks}
+\label{fig:lock_level}
+\end{figure} 
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=1.0\textwidth]{etsmp_graph.eps}
+\caption{Sub-table stuctured ETS compared to ETS table with 256 locks}
+\label{fig:etsmp}
+\end{figure}
+
+The benchmark described in this section was designed to find problems with the hard coded limit of 16 bucket locks in the hash based table types.
+The benchmark program creates as many worker processes as there are schedulers\footnote{The number of schedulers in an Erlang instance is usually set to the number of logical processors on the computer.
+The schedulers are responsible for executing the Erlang processes. 
+One operating system thread is allocated for every scheduler.} and a public ETS table \emph{E} with the \verb|set| table type and \verb|read_concurrency| and \verb|write_concurrency| options enabled.
+The worker processes execute the following algorithm:
+
+\begin{enumerate}
+ \item Create an array called \emph{A} with the numbers 0 to 1024 in a random order
+ \item Do the following until 20000000 divided by the number of schedulers insert operations has been performed:
+ \begin{itemize}
+  \item Insert the elements in the array \emph{A} into the ETS table \emph{E}
+ \end{itemize}
+ \item Send a message to the creator process
+\end{enumerate}
+
+The benchmark finishes when the master process has received messages from all the worker processes.
+About 20000000 insert operations will be performed in total since all workers do 20000000 divided by the number of schedulers insert operations.
+The benchmark is compatible with the bencherl\cite{BENCHERL} framework and can be found on www.github.com\footnote{http://github.com/kjellwinblad/ets\_impl\_project/blob/master/locking\_bench/src}. 
+We use a small number of fixed keys to reduce the likelihood that the performance of the benchmark program will depend on the memory bandwidth.
+The keys could also be generated by a random number generator between the insert operation but we chose to use a fixed array to reduce the effects of the garbage collector and to create higher contention on the table.
+
+The benchmark was run with the standard Erlang/OTP release R15B02 which uses 16 bucket locks for the hash based tables and with modifications of that release that uses 32, 64, 128 and 256 bucket locks.
+
+We also run the benchmark with the ETS table replaced with a new table type implemented in Erlang.
+The new table type is very similar to the one described in US patent nr 6578131~B1~\cite{USPATENT6578131B1}.
+The new table type consists of sub-tables that are ETS tables.
+Which sub-table that will contain a specific key is decided by a hash function.
+The hash function that is used is the \verb|erlang:phash2/2| function.
+Two variants of this new table type was tested.
+The first variant uses as many sub-tales as the number of schedulers.
+The number of sub-tables in the second variant is the smallest prime number that is larger or equal to the number of schedulers.
+We call the first variant of the new table type \emph{etsm} and the second variant \emph{etsmp}.
+This new table type could potentially eliminate the problems with the synchronization points when growing and shrinking the table mentioned in Section~\ref{sec:hash_fine_locking}.
+
+The benchmark was performed on a 64 cores machine with the bulldozer architecture.
+The benchmark program was measured with 1 to 64 schedulers. 
+
+\subsubsection{Results}
+
+The benchmark results for ETS tables with different number of bucket locks is presented in Figure~\ref{fig:lock_level}.
+It is clear that the number of bucket locks is important for the scalability of this benchmark and that 16 locks is not enough to provide good scalability on a machine with 64 cores.
+
+Figure~\ref{fig:etsmp} shows results for the two variants of the new table type \emph{etsm} and \emph{etsmp} together with ETS compiled for 16 and 32 locks.
+The benchmarks for \emph{etsm} and \emph{etsmp} were also run with ETS compiled with 64, 128 and 256 bucket locks but no relevant difference could be seen.
+The graph for the ETS table compiled with 256 locks from Figure~\ref{fig:lock_level} is also included in Figure~\ref{fig:etsmp} for comparison.
+The spikes that can be seen in the graphs for \emph{etsm} but not in the graphs for \emph{etsmp} exist because the hash function that maps keys to sub-tables does not distribute the keys well for some numbers.
+It is also likely that the ETS table with 256 locks suffers from the hash function.
+
+There is a significant overhead with the sub-table structure when only a few schedulers are used.
+The overhead will probably be smaller if the new table type was implemented in C.
+Since the benchmark program only performs insert operations on a small number of fixed keys it will not trigger the potential synchronization problem when growing and shrinking the table, mentioned in Section~\ref{sec:hash_fine_locking}.       
+
+
 
 \section{Scalable ETS Suggestions}
 
@@ -548,8 +619,14 @@ Larson et al. described a concurrent variant of the linear hash table in US pate
 The concurrent variant uses a structure with sub-tables.
 The sub-tables are implemented in a similar way to Erlang's hash table types but with one lock for each bucket.
 Hashing is used to decide which sub-table will contain a specific key.
+The benchmark described in Section~\ref{sec:finegrained_bench} tests this sub-table structure and it seems like it has nice scalability properties. 
 It would probably be easy to extend the current implementation of the ETS hash table types to use a sub-table structure.
 Such an extension could make the problems with synchronization when growing and shrinking the table, as described in section~\ref{sec:hash_fine_locking}, much smaller.
+It would also be interesting to test the sub-table based implementation on more realistic benchmarks.
+
+\section{Acknowledgments}
+ We would like to thank Konstantinos Sagonas for valuable input, proofreading and guidance. 
+ David Klaftenegger also deserves thanks for valuable discussions, contributions to the benchmarks and proofreading.
 
 
 \bibliographystyle{plain}

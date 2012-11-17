@@ -11,13 +11,14 @@ Report Build Instructions
 
 * git
 * gnu make
+* gnuplot
 * latexmk
 * pdflatex
 * [revtex4 latex package](https://authors.aps.org/revtex4/)
 
 On Debian and Ubuntu based systems it should be enough to run the following command:
 
-`apt-get install texlive-full texlive-publishers latex-make`
+`apt-get install texlive-full texlive-publishers latex-make gnuplot`
 
 ### Instructions
 
