@@ -15,15 +15,14 @@
 \begin{document}
 
 \title{Erlang Term Storage Implementation}
-\author{Kjell Winblad and Stavros Aronis}
+\author{RELEASE UU GROUP}
 \date{\today}
 
 
 \begin{abstract}
 
-This report describes in detail the implementation of Erlang Term Storage (ETS) tables as of version R15B02 of the Erlang/OTP distribution.
-The main goal of this documentation attempt is to understand the scalability limitations that the current implementation imposes on applications that heavily use ETS tables.
-With ETS tables often used to share data between processes in Erlang programs, it is important to have a scalable ETS implementation as data sharing is a common bottleneck in parallel applications.
+This report describes in detail the implementation of Erlang Term Storage (ETS) tables as of version R15B02 of the Erlang/OTP system.
+It is written to understand the scalability limitations that the current implementation imposes on applications that heavily use ETS tables.
 
 In particular this report aims to become:
 \begin{itemize} 
@@ -37,7 +36,7 @@ In particular this report aims to become:
 
 \section{Introduction to Erlang}\label{sec:erlang_intro}
 
-Erlang is a garbage collected programming language especially designed to handle parallelism and fault-tolerance well.
+Erlang is a garbage collected programming language especially designed to handle concurrency and fault-tolerance well.
 An Erlang program consists of a number of processes.
 An Erlang process consists of: 
 \begin{itemize}
@@ -48,16 +47,16 @@ An Erlang process consists of:
 \end{itemize}
 From the Erlang programmer's point of view, processes do not share any mutable data.
 The main way for processes to communicate with each other is by sending messages that will appear in the receiving process' mailbox.
-The data in a message sent from one process to another, is in most cases copied from the heap of the sending process to the heap of the receiving process.
-The exception, in the current Erlang/OTP distribution, is values of the binary data type.
-Values of the binary data type are stored in a special data area and only the reference to the binary is copied when messages containing binaries are sent\footnote{Only the reference of the binary is copied when it is sent to another process in the same Erlang node, but the whole binary is copied if it is sent to a process in another Erlang node.}.
+The data in a message sent from one process to another is in most cases copied from the heap of the sending process to the heap of the receiving process.
+The exception, in the current Erlang/OTP system, is binaries above a certain size.
+Binaries above a certain size are stored in a special data area and only the reference to the binary is copied when messages containing binaries are sent\footnote{Only the reference of the binary is copied when it is sent to another process in the same Erlang node, but the whole binary is copied if it is sent to a process in another Erlang node.}.
 The allocation and deallocation of binaries is managed by reference counting.
-The reasoning behind the special case for binaries is that binaries are usually so large that it would be very expensive to do a full copy when sending them.
+The reasoning behind the special case for binaries is that binaries are usually big in size; it would be very expensive to do a full copy when sending them.
 
 The copying can be expensive since the time and space required to do a copy depend on the size of the message.
-However, the processes can be garbage collected independently when data is not shared by the processes.
-The independent garbage collection can be important for the performance of parallel applications, since all other processes can continue unaffected while some are being garbage collected\footnote{
-An alternative Erlang implementation that run on the Java Virtual Machine, called Erjang, just passes the messages' reference when messages are sent.
+However, processes can be garbage collected independently when data is not shared by the processes.
+The independent garbage collection can be important for the performance of concurrent applications, since all other processes can continue unaffected while some are being garbage collected\footnote{
+An alternative shared heap Erlang implementation that runs on the Java Virtual Machine, called Erjang, just passes the messages' reference when messages are sent.
 Thus, the Erjang implementation sends messages faster but can not garbage collect the processes independently.}.
 
 \section{Introduction to Erlang Term Storage}\label{sec:ets_introduction}
@@ -69,41 +68,30 @@ The \emph{ETS tables} are mutable key-value maps.
 ETS provides different table types with different properties, but they all share a common interface.
 
 It is well known that data that needs to be accessed and modified by several processes is a common bottleneck in parallel programs.
-Therefore, it is important for Erlang programmers to have an efficient way of communicating data between processes.
-In some programs the best way to communicate data between processes is to use Erlang's message system.
+In some programs the best way to communicate data between processes is to use messages.
 In other programs ETS can be used as a convenient and efficient way to accomplish data sharing. 
 The program presented in Section~\ref{sec:benchmark} is an example of a program where ETS is useful.
 
-An Erlang ETS table behaves as if a dedicated process served requests for insertions, lookups and other operations on a key-value dictionary.
-However, since ETS is mostly implemented in the lower level programming language C, it is faster than what could be accomplished with a pure Erlang implementation.
-The following are the major reasons why ETS can be more efficiently implemented in C than in Erlang\footnote{The major reason why C was chosen for implementing ETS and not any other lower level programming language is that Erlang/OTP runtime system is implemented in C.}:
-\begin{itemize}
-\item
+An Erlang ETS table behaves as if a dedicated process served requests for insertions, lookups and other operations on a mutable key-value dictionary.
+ETS is implemented in the C programming language in a more efficient way than what could have been accomplished with a pure Erlang implementation.
 Erlang does not have efficient support for working with mutable data.
-The only way to handle mutable data inside an Erlang process is to use the Erlang process dictionary.
-However, this is not very practical since the process dictionary was not designed to be used to implement advanced data structures.
-\item 
+ 
 The process garbage collector copies the process' data during collections.
 Long-lived data therefore is copied many times during such passes. 
-Storing this data in an ETS table, which is not garbage collected can improve the efficiency of programs.
-\end{itemize}
+Storing this data in an ETS table can improve the efficiency of programs.
+
 
 Erlang tuples that are inserted in an ETS table are copied from the heap of the process that is inserting the data to the table.
-Erlang tuples that are retrieved from an ETS table are copied from the memory of the table to the retrieving process's heap.
+Erlang tuples that are retrieved from an ETS table are copied from the memory of the table to the heap of the retrieving process.
 Values of the binary data type are exceptions, as they are when messages are sent between processes.
 The reason why the whole tuple is copied and not just a reference to the tuple is the same as the reason why messages are copied as described in Section~\ref{sec:erlang_intro}.
 
 ETS provides the most common table operations (insert, lookup and delete) as well as operations for searching for all tuples matching a specific criterion and for traversing the tuples in the table.
 
-The Erlang database, Mnesia, gives the programmer an additional abstraction layer on top of ETS. 
-Mnesia has support for:
-\begin{itemize}
-\item persistent tables,
-\item synchronization of tables between Erlang nodes and
-\item transactions.
-\end{itemize}
+The Erlang database, Mnesia \cite{mattsson1998mnesia}, gives the programmer an additional abstraction layer on top of ETS. 
+Mnesia has support for persistent tables, synchronization of tables between Erlang nodes and transactions etc.
 
-\section{Creating an ETS Table}
+\subsection{Creating an ETS Table}
 
 An ETS table can be accessed by either a \emph{table identifier} (TID) or an atom (in case of a \emph{named} table).
 Table identifiers are created by calling the \verb|ets:new/2| BIF (Built-In Function).
@@ -115,84 +103,65 @@ The \verb|ets:new/2| BIF can also take a list of options that specify:
   Only the creating process can read and write on \verb|private| tables, other processes may read but not write \verb|protected| tables and other processes can both read and write \verb|public| tables.
   More information about these options can be found at the Erlang documentation for ETS\footnote{\url{http://www.erlang.org/doc/man/ets.html}}.
 \item
-  Whether the table is a \verb|named_table|, in which case the atom provided as a table name can be used instead of the TID in table operations.
+  Whether the table is a \verb|named_table|, in which case the atom provided as a table name can be used instead of the TID in subsequent table operations.
 \item
   Whether the table type is \verb|set|, \verb|bag|, \verb|duplicate_bag|, or \verb|ordered_set|.
-  The table types \verb|set|, \verb|bag| and \verb|duplicate_bag| are implemented as a linear hash table.
-  In tables of the \verb|set| data type all inserted tuples need to have an unique key.
-  Whereas in tables of the \verb|bag| data type there can be several tuples with the same key but all inserted tuples need to be unique.
-  Finally, the \verb|duplicate_bag| allow several copies of the same tuple.
-  The \verb|ordered_set| table type is implemented as AVL tree.
-  When traversing the tuples in an \verb|ordered_set|, the tuples are guaranteed to come with the smallest keys first (All Erlang terms have a defined order.).
+  The table types \verb|set|, \verb|bag| and \verb|duplicate_bag| are implemented with linear hashing.
+  In tables of type \verb|set| all inserted tuples need to have an unique key.
+  Whereas in tables of type \verb|bag| there can be several tuples with the same key but all inserted tuples need to be unique.
+  Finally, tables of type \verb|duplicate_bag| allow several copies of the same tuple.
+  The \verb|ordered_set| table type is implemented with an AVL tree.
+  When traversing the tuples in an \verb|ordered_set|, the tuples are guaranteed to come with the smallest keys first. 
+  All Erlang terms have a defined order.
   See Section~\ref{sec:table_types} for information about the data structures used in the different table types.
 \item
   Whether fine grained locking (\verb|write_concurrency|) and/or lock(s) optimized for frequent reads (\verb|read_concurrency|) should be used.
-  The fine grained locking only affect the tables that are implement with the linear hash table.
-  So specifying the \verb|write_concurrency| option together with the \verb|ordered_set| options does not have any effect.
   The effect of these options is described in more detail in Sections~\ref{sec:concurrency_options} and~\ref{sec:benchmark}.
 \end{itemize}
 
-ETS tables are ``owned'' by the creating process for as long as the creating process is alive, unless the ownership has been passed to another process with the \verb|ets:give_away/3| operation.
-If the owner of an ETS table terminates the table will be deleted, unless the \verb|heir| option is set.
-Developers can use the \verb|heir| option to specify a process that will inherit the table when the current owner terminates.
+ETS tables are ``owned'' by the creating process for as long as the creating process is alive, unless the ownership has been transferred to another process with the \verb|ets:give_away/3| operation.
+If the owner of an ETS table terminates, the table is deleted, unless the \verb|heir| option is set.
+Which specifies a process that will inherit the table when the current owner terminates.
 A process that is set as \verb|heir| will receive a message signaling the transfer of table ownership.
 
-\section{Overview of Table Operations}\label{sec:table_operations}
+\subsection{Overview of Table Operations}\label{sec:table_operations}
 
-This section gives an overview of the most fundamental ETS table operations.
+We now give a brief overview of the most fundamental ETS table operations.
 The Erlang documentation for ETS has a complete description of all table operations.
 All operations are performed atomically, meaning that an operation would have the same effect if the process performing the operation was the only process.
 However, there is no built-in support for performing a sequence of operations atomically.
-Users that want to perform a sequence of operations atomically can use Mnesia or implement there own mechanism for ensuring atomicity.
+Users that want to perform a sequence of operations atomically can use Mnesia or implement their own mechanism for ensuring atomicity.
 
 \begin{description}
 \item[lookup(Tab, Key) $\rightarrow$ {[Object]}]
   Returns a list of objects that have the given key.
 \item[insert(Tab, ObjectOrObjects) $\rightarrow$ true]
   Insert the given object (or objects, if the parameter is a list of objects) to the table.
-  It is common to use a programming pattern where first a lookup is made to check if a value with a certain key exists and then an insert is made to insert a new value if there was none before.
-  This pattern can be problematic in a parallel application because another process might have inserted the value since the lookup.
-  The Erlang/OTP developers saw this problem and added the \verb|insert_new| operator described below. 
+  If there is a conflicting object in the table, it will be replaced.
 \item[insert\_new(Tab, ObjectOrObjects) $\rightarrow$ boolean()]
-  This operation will insert the given object or objects if no object with the same key as any of the object(s) exists.
-  If a key already exists the operation will return \verb|false| and otherwise \verb|true|.
+  This operation will insert the given object or objects if no object with the same key as any of the objects to be inserted exists.
+  If a key already exists the operation will be aborted and return \verb|false| and otherwise the objects will be inserted and the operation will return \verb|true|.
 \item[delete(Tab, Key) $\rightarrow$ true]
   Deletes all objects with the given key from the table.
 \item[first(Tab) $\rightarrow$ Key $|$ \texttt{end\_of\_table}]
   Returns the first key in the table.
-  If the table is of the \verb|ordered_set| type, the first key in Erlang term order will be returned.
+  If the table is of the \verb|ordered_set| type, the first key according to the Erlang term order will be returned.
   If the table is of any other type, the first key according to the table's internal order will be returned.
   If the table is empty, \verb|end_of_table| will be returned.
 \item[next(Tab, Key) $\rightarrow$ NextKey $|$ \texttt{end\_of\_table}]
   Given a key, this operation returns the next key appearing in the table.
   If the table is of the \verb|ordered_set| type, the next key in Erlang term order is returned.
   If the table is of any other type, the next key according to the table's internal order is returned.
-  If there is no next key, \texttt{end\_of\_table} is returned.
-\item[last(Tab) $\rightarrow$ Key $|$ \texttt{end\_of\_table}] Returns the last key in the table.
+  If there is no next key, the atom \texttt{end\_of\_table} is returned.
+\item[last(Tab) $\rightarrow$ Key $|$ \texttt{end\_of\_table}] Returns the last key in the table, if it exists.
 \end{description}
 
-\section{Previous Work}\label{sec:previous_work}
 
-Scott Lystig Fritchie has suggested an ETS table implementation based on Judy-arrays~\cite{ScottEtsJudy}.
-A Judy-array is a data structure similar to a trie but it uses compression techniques to waste less space and improve cache performance.
-The performance of a Judy-array based implementation is experimentally compared to the AVL-tree (\verb|ordered_set|) and the linear hash table (\verb|set|, \verb|bag| and \verb|duplicate_bag|) implementations currently available.
-For large table sizes the operations lookup, insert and update seem to be fastest with the Judy-array based implementation.
-However, term deletion and table traversal seem to be slower in the Judy-array based implementation.
-Fritchie does not give any suggestions on how to make a concurrent variant of the Judy-array based implementation.
-
-Patrik Nyblom has suggested the addition of software transactional memory (STM) support for Erlang ETS tables~\cite{PatrikErlangTrans}.
-Nyblom argued that STM support could be added to Erlang with only minor changes to the ETS implementation~\cite{PatrikErlangTrans}.
-The suggested implementation would not effect the performance of ETS when the transactional features are not used.
-At the same time, the  STM implementation, could increase parallelism for use cases where the only alternative without transactional memory support is to serialize all operations on the ETS table (or tables).
-Benchmark results for a prototype of ETS with transactional memory, show that transactional memory support for ETS could make some use cases more scalable.
-The kind of use cases that could benefit from the transactional ETS tables are where several ETS operations need to be performed atomically.
-For example, a program that models a bank system where several users transfer money between two bank accounts could benefit from transactional ETS tables. Today, these kind of transactions need to be serialized.
-
-\section{Handling of Tables}
+\section{Organization  of ETS Table Space}
 
 The infrastructure for the handling of tables is described in this section.
-An overview of the data structures used on a global level is provided in Section~\ref{sec:tables_overview}.
-How locking is done when tables are accessed concurrently is described in Section~\ref{sec:tables_locking}.
+We first present a brief overview of the data structures used for the ETS infrastructure.
+Then, we describe how locking is done when tables are accessed concurrently.
 
 \subsection{Global data structures}
 \label{sec:tables_overview}
@@ -204,11 +173,14 @@ Low level operations like finding the main data structure for a particular table
 \item[meta\_main\_table]
   Contains pointers to the main data structure of each table that exists in the system at any point during runtime.
   TIDs map to indices in this table.
+  Each element in the \verb|meta_main_table| has a corresponding readers-writer lock. 
+  These locks are stored in an array called \verb|meta_main_tab_locks| containing 256 elements.
+  Additionally the \verb|meta_main_table| has a write lock which is used to protect several threads from modifying the table at the same time.
 \item[meta\_name\_table]
   Contains mappings from the names of named tables to the respective TIDs.
 \item[meta\_pid\_to\_tab]
   Maps processes (PIDs) to the tables they own.
-  It is used when a process exits to handle transfers of table ownership or table deletion.
+  This data stucture is used when a process exits to handle transfers of table ownership or table deletion.
 \item[meta\_pid\_to\_fixed\_tab]
   Maps processes (PIDs) to tables that are fixated by them (see also Section~\ref{sec:fixation}).
 \end{description}
@@ -222,9 +194,9 @@ Similarly, acquisition of the lock to write on the data should block both read a
 
 Operations may also lock different sets of resources associated with a particular operation on an ETS table:
 \begin{itemize}
-\item Creation and deletion of a table require the acquisition of the write lock protecting the \verb|meta_main_table|.
-\item Creation, deletion and renaming of a named table also require the acquisition of the write lock protecting the \verb|meta_name_table|.
-\item Read and write operations on a table's objects require the acquisition of appropriate table locks.
+\item Creation and deletion of a table require the acquisition of the write lock protecting the \verb|meta_main_table| as well as the corresponding lock in the \verb|meta_main_tab_locks| array.
+\item Creation, deletion and renaming of a named table also require the acquisition of the write lock protecting the \verb|meta_name_table| as well as the corresponding lock in the \verb|meta_main_tab_locks| array.
+\item Read and write operations on a table's objects require the acquisition of appropriate table locks as well as acquisition of the corresponding read lock in the \verb|meta_main_tab_locks| array.
   Using the default options, each table has just one main lock, used for all entries.
   Depending on the type and the options specified when a table is created, read and/or write operations for different keys can be performed simultaneously, by locking only a part of the table.
   We give further details in Section~\ref{sec:table_types}.
@@ -249,13 +221,13 @@ The main data block used in the ETS table implementation of linear dynamic hash 
   These lists correspond to the common ``chaining'' implementation of a hash table.
 \item A ``segment'' section, containing pointers to ``bucket'' sections.
 \end{enumerate}
-Figure~\ref{fig:hash_table_structure} illustrate how the segments are connected to each other. 
+Figure~\ref{fig:hash_table_structure} illustrates how the segments are connected to each other. 
 Plain bucket sections, without any ``segment'' sections attached can also be allocated.
 The entry point for all accesses to a hash table's data is the ``current'' extended segment. 
-Extended segments created earlier are still used for their bucket sections and may also be used again for their segment sections if the table is shrunk.
+Extended segments created earlier are still have bucket sections that are used and may also be used again for their segment sections if the table is shrunk.
 
 As an invariant, buckets in a continuous range starting with bucket 0, are declared as ``active'' buckets.
-The index of the highest active bucket is stored as \verb|nactive|.
+The index of the highest active bucket is stored in a variable called \verb|nactive|.
 
 \subsubsection{Read and write operations}
 
@@ -271,7 +243,7 @@ First, the segment address is used as an index on the segment section of the cur
 The bucket offset is used to find the specific bucket in that bucket section.
 
 For example, the current ``extended segment'' in Figure~\ref{fig:hash_table_structure} is D.
-If a bucket id contains segment address $1$ and bucket offset $1$, then the operation will first find the ``extended segment'' B containing the bucket, by following the link in D. Finally, the operation will use the bucket offset to find the the bucket marked $257$ in the figure.
+If a bucket id contains segment address $1$ and bucket offset $1$, then the operation will first find the ``extended segment'' B containing the bucket, by following the link in D. Finally, the operation will use the bucket offset to find the bucket marked $257$ in the figure.
 
 Under each bucket there exists a chain of hash values and objects that map to it.
 Within each such chain there is no ordering of the objects and new objects are appended at the end of a chain if no object with the same key exists.
@@ -286,13 +258,13 @@ In the case of \verb|bag| and \verb|duplicate_bag| the objects with the same key
 
 \subsubsection{Expansion}
 
-Expansion is triggered after table insertion when the total number of entries in the table exceeds a predefined value.
+Expansion is triggered after a table insertion when the total number of entries in the table exceeds a predefined value.
 Currently, this value is set so that if a uniform distribution of objects is assumed, each bucket has a chain length of 6.
 Expansion happens by adding one bucket to the end of the table and by moving objects to the added bucket.
 
 If the index of the bucket added during the expansion is $N$, then the index of the bucket that will be split $M$ is calculated by dropping the most significant bit of $N$.
 In average half the objects in the bucket with index  $M$ are moved to the bucket with index $N$.
-Please see Larson's paper~\cite{Larson} about linear hash tables for a clear explanation with figures.
+See Larson's paper~\cite{Larson} about linear hash tables for a clear explanation with figures.
 
 If the segment address of the new bucket $A$ corresponds to a pointer in the current segment section that is currently not pointing to a segment, a new segment is allocated.
 The allocated segment will be a plain bucket segment if $A$ is not the last slot in the current segment section.
@@ -327,12 +299,12 @@ The size of this lock array is currently defined at \emph{compile time} to 16, s
 Therefore each lock protects those buckets whose index modulo 16 equals the lock's index.
 
 All insert and delete operations have to update a variable that contains the current number of objects in the table.
-The variable is updated with an atomic instruction.
+This variable is updated with an atomic instruction.
 Which atomic instruction that is used to update the variable depends on which hardware Erlang/OTP is compiled for.
 
 Only one insert or delete operation can perform shrinking or growing at the same time.
-To make sure that no other process is doing resizing a flag is used. 
-This flag is set before and after resizing with an atomic compare and swap instruction\footnote{Again, which instruction that is used depends on the hardware that the Erlang/OTP is compiled for.}.
+To make sure that no other process is doing resizing of a table, a flag is used. 
+This flag is set before and after resizing with an atomic compare and swap instruction\footnote{Again, which instruction is used depends on the hardware for which the Erlang/OTP is compiled for.}.
 If the flag is already set the attempted resize is aborted and the insert or delete operation completes without doing any resize.
 Therefore, if the intensity of insert or delete operations is very high, there will not be enough time to do enough resizing and the average chain length can either increase or decrease to exceed the limit.
 If the average chain length exceeds the limit, it could be a performance problem.
@@ -345,65 +317,60 @@ With the underlying implementation being the same for all the types of hash tabl
 
 \paragraph{Set}
 
-Insertion in tables of \verb|set| type should overwrite the existing value, if the \verb|insert/2| operation is used and it should fail if the insertion is performed with the \verb|insert_new/2| operation.
+Insertion in tables of type \verb|set| should overwrite the existing value, if the \verb|insert/2| operation is used and it should fail if the insertion is performed with the \verb|insert_new/2| operation.
 
 \paragraph{Bag, Duplicate Bag}
 
-Special care should be taken to group together objects with the same key to make the lookup operation easier.
+Special code paths handle these table types in the same functions that are used for the table type set.
 
 \subsection{Ordered Set table type}
 
-The ordered set table type is implemented with an AVL tree.
-An AVL tree was first described by G. M. Adelson-Velskii and E. M. Landis.
+The ordered set table type is implemented with an AVL tree~\cite{adelson1962information}.
 The current implementation uses one lock for the whole table.
 The \verb|write_concurrency| option does not have any effect on tables of this table type.
 
 \section{Concurrency Options} \label{sec:concurrency_options}
 
 The options \verb|write_concurrency| and \verb|read_concurrency| are orthogonal.
-The following table shows how the options affect the different table types:
+\verb|read_concurrency| will change all the readers-writer locks in the table to a type of lock that is optimized for frequent reads.
+The frequent read lock has an array of read flags.
+The schedulers are mapped to different read flags in the lock so they do not all write to the same memory which reduce contention and cache traffic.
 
-\begin{center}
-\begin{tabular}{l|p{5cm}|p{5cm}}
-× & Hash based table types & \verb|ordered_set| table type \\ \hline
-\verb|write_concurrency| & 
-The buckets are divided between 16 locks. Only one lock will be used for all the buckets if this option is not enabled. See Section~\ref{sec:hash_fine_locking} for more information. 
-& Not affected\\ \hline
-\verb|read_concurrency| & 
-Different type of lock(s) optimized for frequent reads are used. & 
-A different type of lock optimized for frequent reads are used.
-\end{tabular}
-\end{center} 
+\verb|write_concurrency| only affect the hash table based table types.
+When \verb|write_concurrency| is enabled for a hash table based table type the buckets in the table are divided between 16 readers-writer locks.
+Hash based tables with \verb|write_concurrency| enabled still have a global readers-writer lock.
+When single element write operations are performed the global readers-writer lock is acquired for read and the bucket lock corresponding to the element is acquired for write.
 
-The concurrency options do not affect tables that are set to \verb|private| since they can only be accessed by one process.
+The \verb|ordered_set| implementation only has the global lock readers-writer lock and no fine grained locking.
+
+The concurrency options do not affect \verb|private| tables since they can only be accessed by one process.
 
 Operations that modify several buckets always lock the whole table.
-For example, if the parameter given to insert is a list, the whole table will be locket while the objects in the list are inserted, to make the operation atomic.
+For example, if the parameter given to \verb|ets:insert/2| is a list, the whole table will be locket while the objects in the list are inserted, to ensure the atomicity of the operation.
 
 \section{Fixation}
 \label{sec:fixation}
 
 In many applications it is common to iterate over all elements in a table.
-For example, in a table containing people, one might want to find all people older than 18 years.
+For example, in a table containing records about people, one might want to find all people older than 18 years.
 To find all those people it is necessary to visit all elements of the table, if it is one of the hash table types.
-If the table is of the type \verb|ordered_set| and the key is the age, one can do it more efficiently by making use of the fact that the objects are ordered.
+If the table is of type \verb|ordered_set| and the key of the table happen to be the age, one can do it more efficiently by making use of the fact that the objects are ordered.
 
 A table can be traversed with the help of the functions \verb|ets:first/1| and \verb|ets:next/2|.
-See Section~\ref{sec:table_operations} for more information about these functions.
-In a concurrent application keys might be deleted and/or added while the table is traversed.
-An exception will occur when calling next, on a table with one of the hash table types, if the key does not exist in the table.
-This will not happen when the \verb|ordered_set| table type is used because the implementation of  \verb|ets:next/2| make use of the ordering of keys.
+However, in a concurrent application, keys might be deleted and/or added while the table is traversed.
+An exception will occur when calling \verb|ets:next/2|, on a table with one of the hash table types, if the key does not exist in the table
+\footnote{This will not happen when the ordered\_set table type is used because the implementation of  ets:next/2 makes use of the ordering of keys.}.
 If a key does not exist, the object with the closest key which is greater than the given key will be returned.
 
-One way of traversing a table of one of the hash table types without having to handle exceptions from \verb|ets:next/2| calls is to have the table private or at least make sure that no other process access it while it is traversed.
-This is not very efficient since all other processes that need to access the table have to wait until the the traversal is finished.
+One way of traversing a table implemented using hashing without having to handle exceptions from \verb|ets:next/2| calls is to make the table private or at least make sure that no other process access it while it is traversed.
+This is not very efficient since all other processes that need to access the table would have to wait until the traversal is finished.
 To solve this problem the function \texttt{ets:safe\_fixtable(Table, true $|$ false)} is available.
 The function can be used to activate and deactivate safe traversal of a table. 
-Safe traversal means that a \verb|ets:first/1| and \verb|ets:next/2| traversal of the table will not give an exception in a \verb|ets:next/2| call.
-The function \verb|ets:safe_fixtable/2| may be called for tables of the table type \verb|ordered_set| but will not have any effect in that case.
+Safe traversal means that an \verb|ets:first/1| and \verb|ets:next/2| traversal of the table will not give an exception in an \verb|ets:next/2| call
+\footnote{The function ets:safe\_fixtable/2 may also be called for tables of the table type ordered\_set but does not have any effect in that case.}.
 
 Safe traversal does not mean that the table can not change until safe traversal is disabled.
-However, when traversing the objects in the table, one particular object will only be returned once, even if objects are removed or inserted during the traversal.
+However, when traversing the objects in the table, objects will only be returned once, even if objects are removed or inserted during the traversal.
 This high-level description can be simplified into the following two low-level ones:
 
 \begin{enumerate}
@@ -411,26 +378,27 @@ This high-level description can be simplified into the following two low-level o
   A key can thus be used as an iterator to find the next key in the iteration sequence.
   Note however that this does not mean that (pointers to) table objects are guaranteed to be maintained while the table is fixated.
   A \verb|bag| or \verb|duplicate_bag| may actually remove objects as long as there is at least one object left in the table with the same key.
-\item Objects will not be moved between buckets due to table grow/shrink.
+\item Objects will not be moved between buckets due to table grow or shrink.
   This will guarantee that iterations do not miss keys or get double hits.
 \end{enumerate}
 
 \subsection{Implementation}
 
 Fixation is monitored by a flag on the table itself and a mapping between PIDs and the identifiers of the tables that the respective process has fixated.
-The fixation flag is checked before growing or shrinking a table to make sure that possible split or merges will not lead to duplicate appearance of objects in a traversal.
-Objects on a fixed table are not deleted if there exist no other objects with the same key.
+The fixation flag is checked before growing or shrinking a table to make sure that moving elements between buckets will not lead to duplicate appearance of objects in a traversal.
+Objects on a fixed table are not deleted if they are the only objects with a particular key.
 Instead objects are marked with an ``invalid\_hash'' flag (pseudo-deleted) and added to a list with objects that must be deleted after the fixation has been lifted.
 
 The mapping of PIDs and TIDs is used to remove fixations when processes exit.
 
 \section{Benchmarks} \label{sec:benchmark}
 
-Two simple benchmarks have been performed.
+Two simple benchmarks have been run.
 The purpose of the benchmark described in Section~\ref{sec:application_bench} is to see how the \verb|write_concurrency| and \verb|read_concurrency| options affect the performance of different table types on a ``real'' problem.
 The benchmark creates workers that all do \verb|lookup|s and \verb|insert|s on the same ETS table.
 The benchmark described in Section~\ref{sec:finegrained_bench} has been designed to investigate the effects of different levels of fine-grained locking.
-Both benchmarks were run on a computer with 64 cores (AMD Bulldozer Architecture).
+Both benchmarks were run on a computer with four AMD Opteron(TM) Processor 6276 CPUs (2.30 GHz) and 128GB of~RAM running Linux 3.2.0-4-amd64 SMP Debian 3.2.35-2 x86\_64 (a total of 64 cores).
+
 %It was run with all combinations of \verb|write_concurrency| and \verb|read_concurrency| together with the table types \verb|set| and \verb|ordered_set|.
 
 \subsection{Application Benchmark}\label{sec:application_bench}
@@ -578,8 +546,29 @@ The overhead will probably be smaller if the new table type was implemented in C
 Since the benchmark program only performs insert operations on a small number of fixed keys it will not trigger the potential synchronization problem when growing and shrinking the table, mentioned in Section~\ref{sec:hash_fine_locking}.       
 
 
+\section{Previous Work}\label{sec:previous_work}
 
-\section{Scalable ETS Suggestions}
+In this section we present previously published work related to ETS. 
+The previous work is discussed further in section~\ref{sec:suggestions}.
+
+Scott Lystig Fritchie has suggested an ETS table implementation based on Judy-arrays~\cite{ScottEtsJudy}.
+A Judy-array is a data structure similar to a trie but it uses compression techniques to waste less space and improve cache performance.
+In his work, the performance of a Judy-array based implementation was experimentally compared to the AVL-tree (\verb|ordered_set|) and the linear hash table (\verb|set|, \verb|bag| and \verb|duplicate_bag|) implementations currently available.
+For large table sizes the operations lookup, insert and update seem to be fastest with the Judy-array based implementation.
+However, term deletion and table traversal seem to be slower in the Judy-array based implementation.
+Fritchie did not give any suggestions on how to make a concurrent variant of the Judy-array based implementation.
+
+Patrik Nyblom has suggested the addition of software transactional memory (STM) support for Erlang ETS tables~\cite{PatrikErlangTrans}, arguing that STM support could be added to Erlang with only minor changes to the ETS implementation~\cite{PatrikErlangTrans}.
+The suggested implementation would not affect the performance of ETS when the transactional features are not used.
+At the same time, the  STM implementation could increase parallelism for use cases where the only alternative without transactional memory support is to serialize all operations on the ETS table (or tables).
+Benchmark results for a prototype of ETS with transactional memory, showed that transactional memory support for ETS could make some use cases more scalable.
+The kind of use cases that could benefit from the transactional ETS tables are these where several ETS operations need to be performed atomically.
+For example, a program that models a bank system where several users transfer money between two bank accounts could benefit from transactional ETS tables. 
+In the current ETS implementation, these kind of transactions need to be serialized.
+
+
+
+\section{Scalable ETS Suggestions}\label{sec:suggestions}
 
 The benchmark described in Section~\ref{sec:benchmark}, shows that fine grained locking (provided by the \verb|write_concurrency| option) can be very important for scalability.
 The number of locks used when fine grained locking is enabled is hard-coded to 16 in the current implementation.
