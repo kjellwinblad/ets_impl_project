@@ -10,8 +10,10 @@ report.pdf: report.tex report.bib
 	cd ../locking_bench  ; \
 	gnuplot < create_etsmp_graph.gp ; \
 	gnuplot < create_lock_level_graph.gp ; \
+	gnuplot < create_lock_level_graph_sandy.gp ; \
 	cp etsmp_graph.eps ../report/etsmp_graph.eps ; \
-	cp lock_level_graph.eps ../report/lock_level_graph.eps
+	cp lock_level_graph.eps ../report/lock_level_graph.eps ; \
+	cp lock_level_graph_sandy.eps ../report/lock_level_graph_sandy.eps
 	latexmk -pdf -e '$$pdflatex=q/pdflatex --shell-escape %O %S/' $*
 
 clean:
